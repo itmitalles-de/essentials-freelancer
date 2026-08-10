@@ -29,7 +29,7 @@ object ApiClient {
                     if (token != null) addHeader("Authorization", "Bearer $token")
                 }.build()
                 val response = chain.proceed(request)
-                if (response.code == 401) {
+                if (response.code == 401 || response.code == 403) {
                     onUnauthorized?.invoke()
                 }
                 response

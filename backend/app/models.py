@@ -7,10 +7,12 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -96,6 +98,15 @@ class TimeEntry(Base):
 
     client: Mapped["Client"] = relationship(back_populates="time_entries")
     invoice: Mapped["Invoice | None"] = relationship(back_populates="time_entries")
+
+    __table_args__ = (
+        Index(
+            "ix_time_entries_single_running_timer",
+            text("(1)"),
+            unique=True,
+            postgresql_where=text("running_started_at IS NOT NULL"),
+        ),
+    )
 
 
 class Invoice(Base):

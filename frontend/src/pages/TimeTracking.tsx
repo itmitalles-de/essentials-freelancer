@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import { Client, TimeEntry } from "../types";
 
 function formatDuration(minutes: number) {
@@ -16,6 +16,7 @@ export function TimeTracking() {
   const [timerClientId, setTimerClientId] = useState<number | "">("");
   const [timerDescription, setTimerDescription] = useState("");
   const [filterClientId, setFilterClientId] = useState<number | "">("");
+  const [error, setError] = useState<string | null>(null);
 
   const [manual, setManual] = useState({
     client_id: "",
@@ -53,37 +54,57 @@ export function TimeTracking() {
 
   const startTimer = async () => {
     if (!timerClientId) return;
-    const entry = await api.post<TimeEntry>("/time-entries/start", {
-      client_id: timerClientId,
-      description: timerDescription,
-    });
-    setRunning(entry);
+    setError(null);
+    try {
+      const entry = await api.post<TimeEntry>("/time-entries/start", {
+        client_id: timerClientId,
+        description: timerDescription,
+      });
+      setRunning(entry);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Timer konnte nicht gestartet werden");
+    }
   };
 
   const stopTimer = async () => {
     if (!running) return;
-    await api.post(`/time-entries/${running.id}/stop`);
-    setRunning(null);
-    setTimerDescription("");
-    loadEntries();
+    setError(null);
+    try {
+      await api.post(`/time-entries/${running.id}/stop`);
+      setRunning(null);
+      setTimerDescription("");
+      loadEntries();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Timer konnte nicht gestoppt werden");
+    }
   };
 
   const onManualSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    await api.post("/time-entries", {
-      client_id: Number(manual.client_id),
-      date: manual.date,
-      description: manual.description,
-      duration_minutes: Math.round(Number(manual.hours) * 60),
-    });
-    setManual({ ...manual, description: "", hours: "" });
-    loadEntries();
+    setError(null);
+    try {
+      await api.post("/time-entries", {
+        client_id: Number(manual.client_id),
+        date: manual.date,
+        description: manual.description,
+        duration_minutes: Math.round(Number(manual.hours) * 60),
+      });
+      setManual({ ...manual, description: "", hours: "" });
+      loadEntries();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Eintrag konnte nicht gespeichert werden");
+    }
   };
 
   const remove = async (id: number) => {
     if (!confirm("Eintrag löschen?")) return;
-    await api.delete(`/time-entries/${id}`);
-    loadEntries();
+    setError(null);
+    try {
+      await api.delete(`/time-entries/${id}`);
+      loadEntries();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Eintrag konnte nicht gelöscht werden");
+    }
   };
 
   const clientName = (id: number) => clients.find((c) => c.id === id)?.name ?? "?";
@@ -91,6 +112,8 @@ export function TimeTracking() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
       <h2 style={{ margin: 0 }}>Zeiterfassung</h2>
+
+      {error && <div style={{ color: "var(--danger)" }}>{error}</div>}
 
       <div className="card" style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
         {running ? (

@@ -127,10 +127,17 @@ def create_invoice(
 
     invoice.total = total
     company.next_invoice_number += 1
-    db.commit()
+    db.flush()
     db.refresh(invoice)
 
-    pdf_path = generate_invoice_pdf(invoice, client, company)
+    try:
+        pdf_path = generate_invoice_pdf(invoice, client, company)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=500, detail=f"Rechnung konnte nicht erstellt werden (PDF-Fehler: {exc})"
+        )
+
     invoice.pdf_path = pdf_path
     db.commit()
     db.refresh(invoice)
@@ -192,6 +199,14 @@ def send_invoice(
     return invoice
 
 
+ALLOWED_STATUS_TRANSITIONS: dict[InvoiceStatus, set[InvoiceStatus]] = {
+    InvoiceStatus.draft: {InvoiceStatus.cancelled},
+    InvoiceStatus.sent: {InvoiceStatus.paid, InvoiceStatus.cancelled},
+    InvoiceStatus.paid: set(),
+    InvoiceStatus.cancelled: set(),
+}
+
+
 @router.put("/{invoice_id}/status", response_model=InvoiceOut)
 def update_status(
     invoice_id: int,
@@ -202,6 +217,11 @@ def update_status(
     invoice = db.get(Invoice, invoice_id)
     if invoice is None:
         raise HTTPException(status_code=404, detail="Rechnung nicht gefunden")
+    if payload.status not in ALLOWED_STATUS_TRANSITIONS.get(invoice.status, set()):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Statuswechsel von {invoice.status.value} zu {payload.status.value} nicht erlaubt",
+        )
     invoice.status = payload.status
     if payload.status == InvoiceStatus.paid:
         invoice.paid_at = datetime.utcnow()
@@ -219,9 +239,9 @@ def delete_invoice(
     invoice = db.get(Invoice, invoice_id)
     if invoice is None:
         raise HTTPException(status_code=404, detail="Rechnung nicht gefunden")
-    if invoice.status != InvoiceStatus.draft:
+    if invoice.status != InvoiceStatus.draft or invoice.sent_at is not None:
         raise HTTPException(
-            status_code=400, detail="Nur Entwürfe können gelöscht werden"
+            status_code=400, detail="Nur unversendete Entwürfe können gelöscht werden"
         )
     for entry in invoice.time_entries:
         entry.billed = False

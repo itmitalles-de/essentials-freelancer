@@ -32,10 +32,10 @@ async function request<T>(
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
 
-  if (res.status === 401) {
+  if (res.status === 401 || res.status === 403) {
     setToken(null);
     window.location.href = "/login";
-    throw new ApiError(401, "Nicht angemeldet");
+    throw new ApiError(res.status, "Nicht angemeldet");
   }
 
   if (!res.ok) {

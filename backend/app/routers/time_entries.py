@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -20,7 +21,11 @@ def _default_rate(db: Session, client: Client) -> float:
     if client.hourly_rate is not None:
         return client.hourly_rate
     company = db.get(CompanySettings, 1)
-    return company.default_hourly_rate if company else 0
+    if company is None:
+        company = CompanySettings(id=1)
+        db.add(company)
+        db.flush()
+    return company.default_hourly_rate
 
 
 @router.get("", response_model=list[TimeEntryOut])
@@ -121,7 +126,13 @@ def start_timer(
         running_started_at=now,
     )
     db.add(entry)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400, detail="Es läuft bereits ein Timer, zuerst stoppen"
+        )
     db.refresh(entry)
     return entry
 

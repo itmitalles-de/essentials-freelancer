@@ -1,7 +1,7 @@
 import datetime as dt
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models import InvoiceStatus
 
@@ -36,8 +36,8 @@ class CompanySettingsBase(BaseModel):
     bank_name: str = ""
     invoice_footer_note: str = ""
     invoice_number_prefix: str = "RE"
-    default_hourly_rate: Decimal = Decimal("0")
-    default_payment_terms_days: int = 14
+    default_hourly_rate: Decimal = Field(default=Decimal("0"), ge=0)
+    default_payment_terms_days: int = Field(default=14, ge=0)
 
 
 class CompanySettingsOut(CompanySettingsBase):
@@ -57,7 +57,7 @@ class ClientBase(BaseModel):
     address_line2: str = ""
     zip_city: str = ""
     email: str = ""
-    hourly_rate: Decimal | None = None
+    hourly_rate: Decimal | None = Field(default=None, ge=0)
     notes: str = ""
     active: bool = True
 
@@ -77,8 +77,8 @@ class TimeEntryBase(BaseModel):
     client_id: int
     date: dt.date
     description: str = ""
-    duration_minutes: int
-    hourly_rate: Decimal | None = None
+    duration_minutes: int = Field(ge=0)
+    hourly_rate: Decimal | None = Field(default=None, ge=0)
 
 
 class TimeEntryCreate(TimeEntryBase):
@@ -88,8 +88,8 @@ class TimeEntryCreate(TimeEntryBase):
 class TimeEntryUpdate(BaseModel):
     date: dt.date | None = None
     description: str | None = None
-    duration_minutes: int | None = None
-    hourly_rate: Decimal | None = None
+    duration_minutes: int | None = Field(default=None, ge=0)
+    hourly_rate: Decimal | None = Field(default=None, ge=0)
 
 
 class TimeEntryStart(BaseModel):
