@@ -1,0 +1,38 @@
+import smtplib
+from email.message import EmailMessage
+
+from app.config import settings
+
+
+class EmailNotConfigured(Exception):
+    pass
+
+
+def send_invoice_email(
+    to_email: str, subject: str, body: str, pdf_path: str, pdf_filename: str
+) -> None:
+    if not settings.smtp_host or not settings.smtp_from:
+        raise EmailNotConfigured(
+            "SMTP ist nicht konfiguriert (SMTP_HOST/SMTP_FROM fehlen)."
+        )
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = settings.smtp_from
+    msg["To"] = to_email
+    msg.set_content(body)
+
+    with open(pdf_path, "rb") as f:
+        msg.add_attachment(
+            f.read(),
+            maintype="application",
+            subtype="pdf",
+            filename=pdf_filename,
+        )
+
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
+        if settings.smtp_use_tls:
+            server.starttls()
+        if settings.smtp_user and settings.smtp_password:
+            server.login(settings.smtp_user, settings.smtp_password)
+        server.send_message(msg)
