@@ -1,9 +1,12 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useLanguage } from "../contexts/LanguageContext";
 import { ThemeToggle } from "./ThemeToggle";
+import { LanguageToggle } from "./LanguageToggle";
 
 export function Layout() {
   const { username, logout } = useAuth();
+  const { t } = useLanguage();
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
@@ -18,16 +21,17 @@ export function Layout() {
         }}
       >
         <div style={{ fontWeight: 700, marginBottom: "1rem" }}>tracker</div>
-        <NavItem to="/">Dashboard</NavItem>
-        <NavItem to="/clients">Kunden</NavItem>
-        <NavItem to="/time">Zeiterfassung</NavItem>
-        <NavItem to="/invoices">Rechnungen</NavItem>
-        <NavItem to="/settings">Einstellungen</NavItem>
+        <NavItem to="/">{t("nav.dashboard")}</NavItem>
+        <NavItem to="/clients">{t("nav.clients")}</NavItem>
+        <NavItem to="/time">{t("nav.time")}</NavItem>
+        <NavItem to="/invoices">{t("nav.invoices")}</NavItem>
+        <NavItem to="/settings">{t("nav.settings")}</NavItem>
         <div style={{ flex: 1 }} />
         <div style={{ fontSize: "0.85rem", color: "var(--fg-muted)" }}>{username}</div>
         <ThemeToggle />
+        <LanguageToggle />
         <button className="secondary" onClick={logout}>
-          Abmelden
+          {t("nav.logout")}
         </button>
       </nav>
       <main style={{ flex: 1, padding: "1.5rem" }}>

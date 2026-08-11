@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, openInvoicePdf } from "../api";
+import { useLanguage } from "../contexts/LanguageContext";
 import { Client, Invoice, TimeEntry } from "../types";
 
 export function Invoices() {
+  const { t } = useLanguage();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [showCreate, setShowCreate] = useState(false);
@@ -56,14 +58,14 @@ export function Invoices() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2 style={{ margin: 0 }}>Rechnungen</h2>
-        <button onClick={() => setShowCreate((v) => !v)}>{showCreate ? "Abbrechen" : "Neue Rechnung"}</button>
+        <h2 style={{ margin: 0 }}>{t("invoices.title")}</h2>
+        <button onClick={() => setShowCreate((v) => !v)}>{showCreate ? t("invoices.cancel") : t("invoices.new")}</button>
       </div>
 
       {showCreate && (
         <div className="card" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
           <select value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value ? Number(e.target.value) : "")}>
-            <option value="">Kunde wählen…</option>
+            <option value="">{t("invoices.chooseClient")}</option>
             {clients.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
@@ -72,16 +74,16 @@ export function Invoices() {
           {selectedClientId !== "" && (
             <>
               {unbilled.length === 0 ? (
-                <div style={{ color: "var(--fg-muted)" }}>Keine offenen Zeiteinträge für diesen Kunden.</div>
+                <div style={{ color: "var(--fg-muted)" }}>{t("invoices.noOpenEntries")}</div>
               ) : (
                 <table>
                   <thead>
                     <tr>
                       <th></th>
-                      <th>Datum</th>
-                      <th>Beschreibung</th>
-                      <th>Dauer</th>
-                      <th>Satz</th>
+                      <th>{t("invoices.colDate")}</th>
+                      <th>{t("invoices.colDescription")}</th>
+                      <th>{t("invoices.colDuration")}</th>
+                      <th>{t("invoices.colRate")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -100,7 +102,7 @@ export function Invoices() {
                 </table>
               )}
               <button onClick={createInvoice} disabled={selectedEntries.size === 0}>
-                Rechnung erstellen ({selectedEntries.size} Einträge)
+                {t("invoices.create")} ({selectedEntries.size} {t("invoices.entries")})
               </button>
             </>
           )}
@@ -110,12 +112,12 @@ export function Invoices() {
       <table className="card">
         <thead>
           <tr>
-            <th>Nr.</th>
-            <th>Kunde</th>
-            <th>Datum</th>
-            <th>Fällig</th>
-            <th>Betrag</th>
-            <th>Status</th>
+            <th>{t("invoices.colNumber")}</th>
+            <th>{t("invoices.colClient")}</th>
+            <th>{t("invoices.colIssueDate")}</th>
+            <th>{t("invoices.colDueDate")}</th>
+            <th>{t("invoices.colAmount")}</th>
+            <th>{t("invoices.colStatus")}</th>
             <th></th>
           </tr>
         </thead>
@@ -129,7 +131,7 @@ export function Invoices() {
               <td>{inv.total} €</td>
               <td><span className={`badge ${inv.status}`}>{inv.status}</span></td>
               <td>
-                <button className="secondary" onClick={() => openInvoicePdf(inv.id, inv.invoice_number)}>PDF</button>
+                <button className="secondary" onClick={() => openInvoicePdf(inv.id, inv.invoice_number)}>{t("invoices.pdf")}</button>
               </td>
             </tr>
           ))}

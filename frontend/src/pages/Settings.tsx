@@ -1,8 +1,10 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api, fetchCompanyLogoUrl, uploadCompanyLogo } from "../api";
+import { useLanguage } from "../contexts/LanguageContext";
 import { CompanySettings } from "../types";
 
 export function Settings() {
+  const { t } = useLanguage();
   const [settings, setSettings] = useState<CompanySettings | null>(null);
   const [saved, setSaved] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -27,7 +29,7 @@ export function Settings() {
     };
   }, [settings?.has_logo]);
 
-  if (!settings) return <div>Lädt…</div>;
+  if (!settings) return <div>{t("settings.loading")}</div>;
 
   const set = (key: keyof CompanySettings) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -51,7 +53,7 @@ export function Settings() {
       const updated = await uploadCompanyLogo<CompanySettings>(file);
       setSettings(updated);
     } catch (err) {
-      setLogoError(err instanceof Error ? err.message : "Upload fehlgeschlagen");
+      setLogoError(err instanceof Error ? err.message : t("settings.errUpload"));
     }
   };
 
@@ -62,13 +64,13 @@ export function Settings() {
 
   return (
     <div style={{ maxWidth: 560 }}>
-      <h2>Einstellungen — Firmendaten</h2>
+      <h2>{t("settings.title")}</h2>
       <div className="card" style={{ display: "flex", flexDirection: "column", gap: "0.6rem", marginBottom: "1rem" }}>
-        <strong>Logo</strong>
+        <strong>{t("settings.logo")}</strong>
         {logoUrl && (
           <img
             src={logoUrl}
-            alt="Firmenlogo"
+            alt={t("settings.logoAlt")}
             style={{ maxWidth: 200, maxHeight: 120, objectFit: "contain", background: "var(--bg-elevated)", borderRadius: 4, padding: 8 }}
           />
         )}
@@ -76,41 +78,41 @@ export function Settings() {
           <input type="file" accept="image/png,image/jpeg" onChange={onLogoSelected} />
           {settings.has_logo && (
             <button type="button" onClick={onLogoRemove}>
-              Logo entfernen
+              {t("settings.logoRemove")}
             </button>
           )}
         </div>
         {logoError && <div style={{ color: "var(--danger)" }}>{logoError}</div>}
         <div style={{ color: "var(--fg-muted)", fontSize: "0.85rem" }}>
-          PNG oder JPEG, max. 5 MB. Erscheint oben rechts auf jeder Rechnung.
+          {t("settings.logoHint")}
         </div>
       </div>
       <form onSubmit={onSubmit} className="card" style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-        <input placeholder="Firmenname" value={settings.company_name} onChange={set("company_name")} />
-        <input placeholder="Inhaber" value={settings.owner_name} onChange={set("owner_name")} />
-        <input placeholder="Adresse" value={settings.address_line1} onChange={set("address_line1")} />
-        <input placeholder="Adresszusatz" value={settings.address_line2} onChange={set("address_line2")} />
-        <input placeholder="PLZ Ort" value={settings.zip_city} onChange={set("zip_city")} />
-        <input placeholder="E-Mail" value={settings.email} onChange={set("email")} />
-        <input placeholder="Telefon" value={settings.phone} onChange={set("phone")} />
-        <input placeholder="Steuernummer" value={settings.tax_id} onChange={set("tax_id")} />
-        <input placeholder="IBAN" value={settings.iban} onChange={set("iban")} />
-        <input placeholder="BIC" value={settings.bic} onChange={set("bic")} />
-        <input placeholder="Bank" value={settings.bank_name} onChange={set("bank_name")} />
-        <textarea placeholder="Fußnote auf Rechnung (z.B. §19 UStG Hinweis)" value={settings.invoice_footer_note} onChange={set("invoice_footer_note")} />
-        <input placeholder="Rechnungsnummern-Präfix" value={settings.invoice_number_prefix} onChange={set("invoice_number_prefix")} />
-        <input placeholder="Standard-Stundensatz" value={settings.default_hourly_rate} onChange={set("default_hourly_rate")} />
+        <input placeholder={t("settings.companyName")} value={settings.company_name} onChange={set("company_name")} />
+        <input placeholder={t("settings.ownerName")} value={settings.owner_name} onChange={set("owner_name")} />
+        <input placeholder={t("settings.address")} value={settings.address_line1} onChange={set("address_line1")} />
+        <input placeholder={t("settings.addressLine2")} value={settings.address_line2} onChange={set("address_line2")} />
+        <input placeholder={t("settings.zipCity")} value={settings.zip_city} onChange={set("zip_city")} />
+        <input placeholder={t("settings.email")} value={settings.email} onChange={set("email")} />
+        <input placeholder={t("settings.phone")} value={settings.phone} onChange={set("phone")} />
+        <input placeholder={t("settings.taxId")} value={settings.tax_id} onChange={set("tax_id")} />
+        <input placeholder={t("settings.iban")} value={settings.iban} onChange={set("iban")} />
+        <input placeholder={t("settings.bic")} value={settings.bic} onChange={set("bic")} />
+        <input placeholder={t("settings.bankName")} value={settings.bank_name} onChange={set("bank_name")} />
+        <textarea placeholder={t("settings.footerNote")} value={settings.invoice_footer_note} onChange={set("invoice_footer_note")} />
+        <input placeholder={t("settings.invoiceNumberPrefix")} value={settings.invoice_number_prefix} onChange={set("invoice_number_prefix")} />
+        <input placeholder={t("settings.defaultHourlyRate")} value={settings.default_hourly_rate} onChange={set("default_hourly_rate")} />
         <input
-          placeholder="Zahlungsziel (Tage)"
+          placeholder={t("settings.paymentTerms")}
           type="number"
           value={settings.default_payment_terms_days}
           onChange={(e) => setSettings({ ...settings, default_payment_terms_days: Number(e.target.value) })}
         />
         <div style={{ color: "var(--fg-muted)", fontSize: "0.85rem" }}>
-          Nächste Rechnungsnummer: {settings.invoice_number_prefix}-{new Date().getFullYear()}-{String(settings.next_invoice_number).padStart(4, "0")}
+          {t("settings.nextInvoiceNumber")} {settings.invoice_number_prefix}-{new Date().getFullYear()}-{String(settings.next_invoice_number).padStart(4, "0")}
         </div>
-        <button type="submit">Speichern</button>
-        {saved && <div style={{ color: "var(--success)" }}>Gespeichert.</div>}
+        <button type="submit">{t("settings.save")}</button>
+        {saved && <div style={{ color: "var(--success)" }}>{t("settings.saved")}</div>}
       </form>
     </div>
   );

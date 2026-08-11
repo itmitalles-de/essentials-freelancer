@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { useLanguage } from "../contexts/LanguageContext";
 import { Client, Invoice, TimeEntry } from "../types";
 
 export function Dashboard() {
+  const { t } = useLanguage();
   const [clients, setClients] = useState<Client[]>([]);
   const [unbilled, setUnbilled] = useState<TimeEntry[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -26,13 +28,13 @@ export function Dashboard() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-      <h2 style={{ margin: 0 }}>Dashboard</h2>
+      <h2 style={{ margin: 0 }}>{t("dashboard.title")}</h2>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
         <div className="card">
-          <h3 style={{ marginTop: 0 }}>Offene Stunden je Kunde</h3>
+          <h3 style={{ marginTop: 0 }}>{t("dashboard.openHoursTitle")}</h3>
           {byClient.size === 0 ? (
-            <div style={{ color: "var(--fg-muted)" }}>Keine offenen Zeiteinträge.</div>
+            <div style={{ color: "var(--fg-muted)" }}>{t("dashboard.noOpenEntries")}</div>
           ) : (
             <table>
               <tbody>
@@ -45,13 +47,13 @@ export function Dashboard() {
               </tbody>
             </table>
           )}
-          <Link to="/time">Zur Zeiterfassung →</Link>
+          <Link to="/time">{t("dashboard.toTimeTracking")}</Link>
         </div>
 
         <div className="card">
-          <h3 style={{ marginTop: 0 }}>Offene Rechnungen (versendet, unbezahlt)</h3>
+          <h3 style={{ marginTop: 0 }}>{t("dashboard.openInvoicesTitle")}</h3>
           {openInvoices.length === 0 ? (
-            <div style={{ color: "var(--fg-muted)" }}>Keine offenen Rechnungen.</div>
+            <div style={{ color: "var(--fg-muted)" }}>{t("dashboard.noOpenInvoices")}</div>
           ) : (
             <table>
               <tbody>
@@ -65,7 +67,7 @@ export function Dashboard() {
               </tbody>
             </table>
           )}
-          <Link to="/invoices">Zu den Rechnungen →</Link>
+          <Link to="/invoices">{t("dashboard.toInvoices")}</Link>
         </div>
       </div>
     </div>

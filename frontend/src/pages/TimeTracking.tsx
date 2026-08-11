@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api, ApiError } from "../api";
+import { useLanguage } from "../contexts/LanguageContext";
 import { Client, TimeEntry } from "../types";
 
 function formatDuration(minutes: number) {
@@ -9,6 +10,7 @@ function formatDuration(minutes: number) {
 }
 
 export function TimeTracking() {
+  const { t } = useLanguage();
   const [clients, setClients] = useState<Client[]>([]);
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [running, setRunning] = useState<TimeEntry | null>(null);
@@ -62,7 +64,7 @@ export function TimeTracking() {
       });
       setRunning(entry);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Timer konnte nicht gestartet werden");
+      setError(e instanceof ApiError ? e.message : t("time.errStart"));
     }
   };
 
@@ -75,7 +77,7 @@ export function TimeTracking() {
       setTimerDescription("");
       loadEntries();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Timer konnte nicht gestoppt werden");
+      setError(e instanceof ApiError ? e.message : t("time.errStop"));
     }
   };
 
@@ -92,18 +94,18 @@ export function TimeTracking() {
       setManual({ ...manual, description: "", hours: "" });
       loadEntries();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Eintrag konnte nicht gespeichert werden");
+      setError(err instanceof ApiError ? err.message : t("time.errSave"));
     }
   };
 
   const remove = async (id: number) => {
-    if (!confirm("Eintrag löschen?")) return;
+    if (!confirm(t("time.confirmDelete"))) return;
     setError(null);
     try {
       await api.delete(`/time-entries/${id}`);
       loadEntries();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Eintrag konnte nicht gelöscht werden");
+      setError(e instanceof ApiError ? e.message : t("time.errDelete"));
     }
   };
 
@@ -111,7 +113,7 @@ export function TimeTracking() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-      <h2 style={{ margin: 0 }}>Zeiterfassung</h2>
+      <h2 style={{ margin: 0 }}>{t("time.title")}</h2>
 
       {error && <div style={{ color: "var(--danger)" }}>{error}</div>}
 
@@ -123,39 +125,39 @@ export function TimeTracking() {
             </div>
             <div style={{ color: "var(--fg-muted)" }}>{running.description}</div>
             <div style={{ flex: 1 }} />
-            <button className="danger" onClick={stopTimer}>Stopp</button>
+            <button className="danger" onClick={stopTimer}>{t("time.stop")}</button>
           </>
         ) : (
           <>
             <select value={timerClientId} onChange={(e) => setTimerClientId(Number(e.target.value))}>
-              <option value="">Kunde wählen…</option>
+              <option value="">{t("time.chooseClient")}</option>
               {clients.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
             <input
-              placeholder="Beschreibung"
+              placeholder={t("time.description")}
               value={timerDescription}
               onChange={(e) => setTimerDescription(e.target.value)}
               style={{ flex: 1 }}
             />
-            <button onClick={startTimer} disabled={!timerClientId}>Start</button>
+            <button onClick={startTimer} disabled={!timerClientId}>{t("time.start")}</button>
           </>
         )}
       </div>
 
       <form onSubmit={onManualSubmit} className="card" style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
-        <strong>Manueller Eintrag:</strong>
+        <strong>{t("time.manualEntry")}</strong>
         <select required value={manual.client_id} onChange={(e) => setManual({ ...manual, client_id: e.target.value })}>
-          <option value="">Kunde…</option>
+          <option value="">{t("time.client")}</option>
           {clients.map((c) => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
         <input type="date" value={manual.date} onChange={(e) => setManual({ ...manual, date: e.target.value })} />
-        <input placeholder="Beschreibung" value={manual.description} onChange={(e) => setManual({ ...manual, description: e.target.value })} />
+        <input placeholder={t("time.description")} value={manual.description} onChange={(e) => setManual({ ...manual, description: e.target.value })} />
         <input
-          placeholder="Stunden"
+          placeholder={t("time.hours")}
           type="number"
           step="0.25"
           min="0"
@@ -164,12 +166,12 @@ export function TimeTracking() {
           onChange={(e) => setManual({ ...manual, hours: e.target.value })}
           style={{ width: 90 }}
         />
-        <button type="submit">Hinzufügen</button>
+        <button type="submit">{t("time.add")}</button>
       </form>
 
       <div>
         <select value={filterClientId} onChange={(e) => setFilterClientId(e.target.value ? Number(e.target.value) : "")}>
-          <option value="">Alle Kunden</option>
+          <option value="">{t("time.allClients")}</option>
           {clients.map((c) => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
@@ -179,12 +181,12 @@ export function TimeTracking() {
       <table className="card">
         <thead>
           <tr>
-            <th>Datum</th>
-            <th>Kunde</th>
-            <th>Beschreibung</th>
-            <th>Dauer</th>
-            <th>Satz</th>
-            <th>Status</th>
+            <th>{t("time.colDate")}</th>
+            <th>{t("time.colClient")}</th>
+            <th>{t("time.colDescription")}</th>
+            <th>{t("time.colDuration")}</th>
+            <th>{t("time.colRate")}</th>
+            <th>{t("time.colStatus")}</th>
             <th></th>
           </tr>
         </thead>
@@ -196,10 +198,10 @@ export function TimeTracking() {
               <td>{e.description}</td>
               <td>{formatDuration(e.duration_minutes)}</td>
               <td>{e.hourly_rate} €/h</td>
-              <td>{e.billed ? "abgerechnet" : "offen"}</td>
+              <td>{e.billed ? t("time.statusBilled") : t("time.statusOpen")}</td>
               <td>
                 {!e.billed && (
-                  <button className="danger" onClick={() => remove(e.id)}>Löschen</button>
+                  <button className="danger" onClick={() => remove(e.id)}>{t("time.delete")}</button>
                 )}
               </td>
             </tr>

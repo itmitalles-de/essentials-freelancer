@@ -1,10 +1,13 @@
 import { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useLanguage } from "../contexts/LanguageContext";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { LanguageToggle } from "../components/LanguageToggle";
 
 export function Login() {
   const { login } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -19,7 +22,7 @@ export function Login() {
       await login(username, password);
       navigate("/");
     } catch {
-      setError("Anmeldung fehlgeschlagen");
+      setError(t("login.error"));
     } finally {
       setSubmitting(false);
     }
@@ -36,26 +39,27 @@ export function Login() {
         gap: "1rem",
       }}
     >
-      <div style={{ position: "absolute", top: 16, right: 16 }}>
+      <div style={{ position: "absolute", top: 16, right: 16, display: "flex", gap: "0.4rem" }}>
         <ThemeToggle />
+        <LanguageToggle />
       </div>
       <form onSubmit={onSubmit} className="card" style={{ width: 320, display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         <h2 style={{ margin: 0 }}>tracker</h2>
         <input
-          placeholder="Benutzername"
+          placeholder={t("login.username")}
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           autoFocus
         />
         <input
-          placeholder="Passwort"
+          placeholder={t("login.password")}
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
         {error && <div style={{ color: "var(--danger)" }}>{error}</div>}
         <button type="submit" disabled={submitting}>
-          Anmelden
+          {t("login.submit")}
         </button>
       </form>
     </div>
