@@ -111,4 +111,38 @@ export async function fetchCompanyLogoUrl(): Promise<string | null> {
   return URL.createObjectURL(blob);
 }
 
+export async function uploadExpenseReceipt<T>(expenseId: number, file: File): Promise<T> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${API_BASE}/expenses/${expenseId}/receipt`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      detail = body.detail ?? detail;
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(res.status, detail);
+  }
+  return res.json() as Promise<T>;
+}
+
+export async function openExpenseReceipt(expenseId: number) {
+  const token = getToken();
+  const res = await fetch(`${API_BASE}/expenses/${expenseId}/receipt`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new ApiError(res.status, "Beleg konnte nicht geladen werden");
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank");
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
 export { ApiError, API_BASE };

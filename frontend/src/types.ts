@@ -49,6 +49,16 @@ export interface Invoice {
   line_items: InvoiceLineItem[];
 }
 
+export interface Expense {
+  id: number;
+  date: string;
+  description: string;
+  category: string;
+  amount: string;
+  created_at: string;
+  has_receipt: boolean;
+}
+
 export interface CompanySettings {
   company_name: string;
   owner_name: string;

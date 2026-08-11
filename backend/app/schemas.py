@@ -152,3 +152,28 @@ class InvoiceOut(BaseModel):
 
 class InvoiceStatusUpdate(BaseModel):
     status: InvoiceStatus
+
+
+# ---- Expenses ----
+class ExpenseBase(BaseModel):
+    date: dt.date
+    description: str
+    category: str = ""
+    amount: Decimal = Field(ge=0)
+
+
+class ExpenseCreate(ExpenseBase):
+    pass
+
+
+class ExpenseOut(ExpenseBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    created_at: dt.datetime
+    has_receipt: bool = False
+
+    @classmethod
+    def from_model(cls, expense) -> "ExpenseOut":
+        out = cls.model_validate(expense)
+        out.has_receipt = bool(expense.receipt_path)
+        return out

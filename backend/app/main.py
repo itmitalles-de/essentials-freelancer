@@ -5,7 +5,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, SessionLocal, engine
 from app.models import CompanySettings, User
-from app.routers import auth, clients, invoices, settings as settings_router, time_entries
+from app.routers import (
+    auth,
+    clients,
+    expenses,
+    invoices,
+    settings as settings_router,
+    time_entries,
+)
 from app.security import hash_password
 from app.config import settings
 
@@ -48,6 +55,7 @@ app.include_router(auth.router)
 app.include_router(clients.router)
 app.include_router(time_entries.router)
 app.include_router(invoices.router)
+app.include_router(expenses.router)
 app.include_router(settings_router.router)
 
 

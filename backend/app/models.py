@@ -146,3 +146,15 @@ class InvoiceLineItem(Base):
     amount: Mapped[float] = mapped_column(Numeric(10, 2))
 
     invoice: Mapped["Invoice"] = relationship(back_populates="line_items")
+
+
+class Expense(Base):
+    __tablename__ = "expenses"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    date: Mapped[date] = mapped_column(Date)
+    description: Mapped[str] = mapped_column(String(255))
+    category: Mapped[str] = mapped_column(String(64), default="")
+    amount: Mapped[float] = mapped_column(Numeric(10, 2))
+    receipt_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
