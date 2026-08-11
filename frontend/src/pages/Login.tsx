@@ -44,7 +44,10 @@ export function Login() {
         <LanguageToggle />
       </div>
       <form onSubmit={onSubmit} className="card" style={{ width: 320, display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-        <h2 style={{ margin: 0 }}>freelancer</h2>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+          <img src="/icon.svg" alt="" width={32} height={32} />
+          <h2 style={{ margin: 0 }}>freelancer</h2>
+        </div>
         <input
           placeholder={t("login.username")}
           value={username}

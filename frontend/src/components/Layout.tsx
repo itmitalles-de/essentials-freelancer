@@ -20,7 +20,10 @@ export function Layout() {
           gap: "0.4rem",
         }}
       >
-        <div style={{ fontWeight: 700, marginBottom: "1rem" }}>freelancer</div>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
+          <img src="/icon.svg" alt="" width={24} height={24} />
+          <span style={{ fontWeight: 700 }}>freelancer</span>
+        </div>
         <NavItem to="/">{t("nav.dashboard")}</NavItem>
         <NavItem to="/clients">{t("nav.clients")}</NavItem>
         <NavItem to="/time">{t("nav.time")}</NavItem>
