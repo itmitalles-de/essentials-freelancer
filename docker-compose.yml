@@ -46,6 +46,19 @@ services:
       - default
       - proxy_net
 
+  freelancer-dashboard:
+    image: b4bz/homer:latest
+    restart: unless-stopped
+    user: "1000:1000"
+    environment:
+      INIT_ASSETS: "0"
+    volumes:
+      - ./dashboard/assets:/www/assets:ro
+    ports:
+      - "${DASHBOARD_PORT:-8081}:8080"
+    networks:
+      - proxy_net
+
 volumes:
   tracker_db_data:
   tracker_invoices:
