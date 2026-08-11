@@ -1,0 +1,3 @@
+dashboard.itmitalles.de {
+    reverse_proxy freelancer-dashboard:8080
+}
