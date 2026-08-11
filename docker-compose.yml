@@ -42,7 +42,15 @@ services:
       - backend
     ports:
       - "${FRONTEND_PORT:-8080}:80"
+    networks:
+      - default
+      - proxy_net
 
 volumes:
   tracker_db_data:
   tracker_invoices:
+
+networks:
+  default:
+  proxy_net:
+    external: true
