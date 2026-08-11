@@ -1,0 +1,36 @@
+:root {
+  --itma-yellow: #f4d03f;
+}
+
+body #app {
+  min-height: 100vh;
+}
+
+.first-line .title {
+  letter-spacing: -0.025em;
+}
+
+.card {
+  border: 1px solid rgba(244, 208, 63, 0.16);
+  transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(244, 208, 63, 0.72);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.34);
+}
+
+.card .tag {
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
+  }
+
+  .card:hover {
+    transform: none;
+  }
+}
