@@ -1,6 +1,6 @@
-# tracker
+# freelancer
 
-Zeiterfassung, Rechnungsstellung und Rechnungsversand für itmitalles — als Docker-App (Backend + Web-Frontend) plus Android-Client.
+Zeiterfassung, Rechnungsstellung und Rechnungsversand für itmitalles — als Docker-App (Backend + Web-Frontend), Android-Client und separates Homer-Dashboard.
 
 ## Funktionen
 
@@ -10,22 +10,27 @@ Zeiterfassung, Rechnungsstellung und Rechnungsversand für itmitalles — als Do
 - Rechnungen per SMTP versenden, Status verfolgen (Entwurf/versendet/bezahlt)
 - Alle Rechnungen jederzeit abrufbar (Web + Android)
 - Android-App zum Zeiterfassen und Rechnungen einsehen unterwegs
+- Homer-Dashboard als zentrale Startseite für Freelancer-Werkzeuge und Infrastruktur
 
 ## Web-Stack
 
 - **Backend**: FastAPI (Python), PostgreSQL, PDF-Erzeugung mit reportlab, SMTP-Versand
 - **Frontend**: React + Vite + TypeScript, Dark Mode (System/Hell/Dunkel, persistiert)
-- **Deployment**: Docker Compose (`db`, `backend`, `frontend`)
+- **Dashboard**: Homer, konfiguriert unter `dashboard/assets/config.yml`
+- **Deployment**: Docker Compose (`db`, `backend`, `frontend`, `freelancer-dashboard`)
 
 ## Setup
 
 ```bash
 cp .env.example .env
 # .env anpassen: JWT_SECRET, ADMIN_PASSWORD, ggf. SMTP-Zugangsdaten
+docker network inspect proxy_net >/dev/null 2>&1 || docker network create proxy_net
 docker compose up -d --build
 ```
 
 Danach ist die App unter `http://localhost:8080` erreichbar (Port über `FRONTEND_PORT` in `.env` konfigurierbar). Login mit `ADMIN_USERNAME`/`ADMIN_PASSWORD` aus der `.env`.
+
+Das Homer-Dashboard läuft standardmäßig unter `http://localhost:8081`. Details zu Domain, Caddy und Konfiguration stehen in [`dashboard/README.md`](dashboard/README.md).
 
 Firmendaten (Adresse, IBAN, Steuernummer, Rechnungstext) werden nach dem ersten Login unter **Einstellungen** gepflegt.
 
@@ -57,3 +62,4 @@ Debug-APK liegt danach unter `android/app/build/outputs/apk/debug/app-debug.apk`
 - Single-User: nur ein Admin-Zugang (aus `.env` geseedet), kein Multi-Tenant
 - Kleinunternehmerregelung (§19 UStG): keine Umsatzsteuer, entsprechender Hinweis auf jeder Rechnung
 - Rechnungsnummern sind fortlaufend (`<Präfix>-<Jahr>-<laufende Nummer>`), Zähler liegt in den Firmeneinstellungen
+- Homer enthält ausschließlich Links und öffentlich auslieferbare Darstellung; keine Zugangsdaten oder Tokens
