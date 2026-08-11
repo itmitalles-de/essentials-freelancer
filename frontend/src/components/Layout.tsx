@@ -20,7 +20,7 @@ export function Layout() {
           gap: "0.4rem",
         }}
       >
-        <div style={{ fontWeight: 700, marginBottom: "1rem" }}>tracker</div>
+        <div style={{ fontWeight: 700, marginBottom: "1rem" }}>freelancer</div>
         <NavItem to="/">{t("nav.dashboard")}</NavItem>
         <NavItem to="/clients">{t("nav.clients")}</NavItem>
         <NavItem to="/time">{t("nav.time")}</NavItem>

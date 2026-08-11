@@ -44,7 +44,7 @@ export function Login() {
         <LanguageToggle />
       </div>
       <form onSubmit={onSubmit} className="card" style={{ width: 320, display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-        <h2 style={{ margin: 0 }}>tracker</h2>
+        <h2 style={{ margin: 0 }}>freelancer</h2>
         <input
           placeholder={t("login.username")}
           value={username}
