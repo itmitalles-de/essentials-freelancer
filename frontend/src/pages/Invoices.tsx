@@ -124,7 +124,7 @@ export function Invoices() {
         <tbody>
           {invoices.map((inv) => (
             <tr key={inv.id}>
-              <td><Link to={`/invoices/${inv.id}`}>{inv.invoice_number}</Link></td>
+              <td><Link to={`/invoices/${inv.id}`} className="btn btn-sm">{inv.invoice_number}</Link></td>
               <td>{clientName(inv.client_id)}</td>
               <td>{inv.issue_date}</td>
               <td>{inv.due_date}</td>

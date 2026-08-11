@@ -47,7 +47,7 @@ export function Dashboard() {
               </tbody>
             </table>
           )}
-          <Link to="/time">{t("dashboard.toTimeTracking")}</Link>
+          <Link to="/time" className="btn">{t("dashboard.toTimeTracking")}</Link>
         </div>
 
         <div className="card">
@@ -59,7 +59,7 @@ export function Dashboard() {
               <tbody>
                 {openInvoices.map((inv) => (
                   <tr key={inv.id}>
-                    <td><Link to={`/invoices/${inv.id}`}>{inv.invoice_number}</Link></td>
+                    <td><Link to={`/invoices/${inv.id}`} className="btn btn-sm">{inv.invoice_number}</Link></td>
                     <td>{clientName(inv.client_id)}</td>
                     <td>{inv.total} €</td>
                   </tr>
@@ -67,7 +67,7 @@ export function Dashboard() {
               </tbody>
             </table>
           )}
-          <Link to="/invoices">{t("dashboard.toInvoices")}</Link>
+          <Link to="/invoices" className="btn">{t("dashboard.toInvoices")}</Link>
         </div>
       </div>
     </div>

@@ -56,6 +56,30 @@ body {
 
 a {
   color: var(--accent);
+  text-decoration: none;
+}
+
+a.btn {
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.9rem;
+  font-weight: 600;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+a.btn:hover {
+  background: var(--bg);
+  border-color: var(--accent);
+}
+
+a.btn.btn-sm {
+  padding: 0.25rem 0.6rem;
+  font-weight: 600;
+  font-size: 0.85rem;
 }
 
 button, input, select, textarea {
