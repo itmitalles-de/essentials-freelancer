@@ -1,10 +1,12 @@
 import os
 from decimal import Decimal
 
+from PIL import Image as PILImage
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.platypus import (
+    Image,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -16,9 +18,21 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from app.config import settings
 from app.models import CompanySettings, Client, Invoice
 
+LOGO_MAX_WIDTH = 45 * mm
+LOGO_MAX_HEIGHT = 25 * mm
+
 
 def _eur(value: Decimal) -> str:
     return f"{value:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _logo_flowable(logo_path: str | None) -> Image | None:
+    if not logo_path or not os.path.exists(logo_path):
+        return None
+    with PILImage.open(logo_path) as img:
+        width, height = img.size
+    scale = min(LOGO_MAX_WIDTH / width, LOGO_MAX_HEIGHT / height)
+    return Image(logo_path, width=width * scale, height=height * scale)
 
 
 def generate_invoice_pdf(
@@ -56,7 +70,25 @@ def generate_invoice_pdf(
             ],
         )
     )
-    story.append(Paragraph(sender_line, small))
+    logo = _logo_flowable(company.logo_path)
+    if logo is not None:
+        header_table = Table(
+            [[Paragraph(sender_line, small), logo]],
+            colWidths=[125 * mm, LOGO_MAX_WIDTH],
+        )
+        header_table.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ]
+            )
+        )
+        story.append(header_table)
+    else:
+        story.append(Paragraph(sender_line, small))
     story.append(Spacer(1, 10 * mm))
 
     client_lines = [client.name]

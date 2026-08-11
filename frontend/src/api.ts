@@ -78,4 +78,37 @@ export async function openInvoicePdf(invoiceId: number, invoiceNumber: string) {
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
+export async function uploadCompanyLogo<T>(file: File): Promise<T> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${API_BASE}/settings/logo`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      detail = body.detail ?? detail;
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(res.status, detail);
+  }
+  return res.json() as Promise<T>;
+}
+
+export async function fetchCompanyLogoUrl(): Promise<string | null> {
+  const token = getToken();
+  const res = await fetch(`${API_BASE}/settings/logo`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new ApiError(res.status, "Logo konnte nicht geladen werden");
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
 export { ApiError, API_BASE };

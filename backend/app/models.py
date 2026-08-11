@@ -55,6 +55,7 @@ class CompanySettings(Base):
     )
     invoice_number_prefix: Mapped[str] = mapped_column(String(32), default="RE")
     next_invoice_number: Mapped[int] = mapped_column(Integer, default=1)
+    logo_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     default_hourly_rate: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
     default_payment_terms_days: Mapped[int] = mapped_column(Integer, default=14)
 

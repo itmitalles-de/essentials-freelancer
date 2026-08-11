@@ -66,4 +66,5 @@ export interface CompanySettings {
   default_hourly_rate: string;
   default_payment_terms_days: number;
   next_invoice_number: number;
+  has_logo: boolean;
 }

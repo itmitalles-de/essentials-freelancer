@@ -43,6 +43,13 @@ class CompanySettingsBase(BaseModel):
 class CompanySettingsOut(CompanySettingsBase):
     model_config = ConfigDict(from_attributes=True)
     next_invoice_number: int
+    has_logo: bool = False
+
+    @classmethod
+    def from_model(cls, company) -> "CompanySettingsOut":
+        out = cls.model_validate(company)
+        out.has_logo = bool(company.logo_path)
+        return out
 
 
 class CompanySettingsUpdate(CompanySettingsBase):
