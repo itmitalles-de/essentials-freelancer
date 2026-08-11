@@ -72,13 +72,12 @@ a.btn {
 }
 
 a.btn:hover {
-  background: var(--bg);
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
   border-color: var(--accent);
 }
 
 a.btn.btn-sm {
   padding: 0.25rem 0.6rem;
-  font-weight: 600;
   font-size: 0.85rem;
 }
 
