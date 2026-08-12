@@ -1,6 +1,10 @@
-# freelancer
+# Freelancer
 
 Zeiterfassung, Rechnungsstellung und Rechnungsversand für itmitalles — als Docker-App (Backend + Web-Frontend), Android-Client und separates Homer-Dashboard.
+
+> **Hauptprojekt 1 von 3:** Freelancer ist das fokussierte Arbeits- und Abrechnungssystem für Solo-Selbstständige und Dienstleister. Produkt- und Shop-Prozesse gehören in die Shop Suite; Datei-, Mail- und Kollaborationsfunktionen in die Workspace Suite.
+
+**Aktueller Stand (2026-08-12):** Funktionsfähiger Single-User-MVP mit Kunden, Zeiterfassung, Rechnungen/PDF/SMTP, Ausgaben samt Beleg-Upload, Android-Client und Homer-Dashboard. Es fehlt noch eine belastbare automatische Test- und CI-Basis; vor größeren neuen Features hat Stabilisierung Vorrang.
 
 ## Funktionen
 
