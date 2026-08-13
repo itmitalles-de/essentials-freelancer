@@ -62,9 +62,9 @@ export const api = {
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
 
-export async function openInvoicePdf(invoiceId: number, invoiceNumber: string) {
+async function openAuthenticatedPdf(path: string, fileName: string) {
   const token = getToken();
-  const res = await fetch(`${API_BASE}/invoices/${invoiceId}/pdf`, {
+  const res = await fetch(`${API_BASE}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!res.ok) throw new ApiError(res.status, "PDF konnte nicht geladen werden");
@@ -73,9 +73,20 @@ export async function openInvoicePdf(invoiceId: number, invoiceNumber: string) {
   const a = document.createElement("a");
   a.href = url;
   a.target = "_blank";
-  a.download = `${invoiceNumber}.pdf`;
+  a.download = fileName;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+export function openInvoicePdf(invoiceId: number, invoiceNumber: string) {
+  return openAuthenticatedPdf(
+    `/invoices/${invoiceId}/pdf`,
+    `${invoiceNumber}.pdf`
+  );
+}
+
+export function openQuotePdf(quoteId: number, quoteNumber: string) {
+  return openAuthenticatedPdf(`/quotes/${quoteId}/pdf`, `${quoteNumber}.pdf`);
 }
 
 export async function uploadCompanyLogo<T>(file: File): Promise<T> {

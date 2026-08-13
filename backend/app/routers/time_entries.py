@@ -1,23 +1,41 @@
-from datetime import datetime
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user
-from app.models import Client, CompanySettings, TimeEntry, User
+from app.models import Client, CompanySettings, Project, TimeEntry, User
 from app.schemas import (
     TimeEntryCreate,
     TimeEntryOut,
     TimeEntryStart,
     TimeEntryUpdate,
 )
+from app.time_utils import utc_now_naive
 
 router = APIRouter(prefix="/api/time-entries", tags=["time-entries"])
 
 
-def _default_rate(db: Session, client: Client) -> float:
+def _project_for_client(
+    db: Session, project_id: int | None, client_id: int, *, require_active: bool = True
+) -> Project | None:
+    if project_id is None:
+        return None
+    project = db.get(Project, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
+    if project.client_id != client_id:
+        raise HTTPException(
+            status_code=400, detail="Projekt gehört nicht zu diesem Kunden"
+        )
+    if require_active and not project.active:
+        raise HTTPException(status_code=400, detail="Projekt ist archiviert")
+    return project
+
+
+def _default_rate(db: Session, client: Client, project: Project | None = None) -> float:
+    if project is not None and project.hourly_rate is not None:
+        return project.hourly_rate
     if client.hourly_rate is not None:
         return client.hourly_rate
     company = db.get(CompanySettings, 1)
@@ -31,6 +49,7 @@ def _default_rate(db: Session, client: Client) -> float:
 @router.get("", response_model=list[TimeEntryOut])
 def list_time_entries(
     client_id: int | None = None,
+    project_id: int | None = None,
     billed: bool | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -38,6 +57,8 @@ def list_time_entries(
     query = db.query(TimeEntry)
     if client_id is not None:
         query = query.filter(TimeEntry.client_id == client_id)
+    if project_id is not None:
+        query = query.filter(TimeEntry.project_id == project_id)
     if billed is not None:
         query = query.filter(TimeEntry.billed == billed)
     return query.order_by(TimeEntry.date.desc(), TimeEntry.id.desc()).all()
@@ -53,8 +74,9 @@ def create_time_entry(
     if client is None:
         raise HTTPException(status_code=404, detail="Kunde nicht gefunden")
     data = payload.model_dump()
+    project = _project_for_client(db, data["project_id"], client.id)
     if data["hourly_rate"] is None:
-        data["hourly_rate"] = _default_rate(db, client)
+        data["hourly_rate"] = _default_rate(db, client, project)
     entry = TimeEntry(**data)
     db.add(entry)
     db.commit()
@@ -76,7 +98,10 @@ def update_time_entry(
         raise HTTPException(
             status_code=400, detail="Bereits abgerechnete Einträge können nicht geändert werden"
         )
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    if "project_id" in changes:
+        _project_for_client(db, changes["project_id"], entry.client_id)
+    for key, value in changes.items():
         setattr(entry, key, value)
     db.commit()
     db.refresh(entry)
@@ -109,6 +134,7 @@ def start_timer(
     client = db.get(Client, payload.client_id)
     if client is None:
         raise HTTPException(status_code=404, detail="Kunde nicht gefunden")
+    project = _project_for_client(db, payload.project_id, client.id)
     running = (
         db.query(TimeEntry).filter(TimeEntry.running_started_at.isnot(None)).first()
     )
@@ -116,13 +142,14 @@ def start_timer(
         raise HTTPException(
             status_code=400, detail="Es läuft bereits ein Timer, zuerst stoppen"
         )
-    now = datetime.utcnow()
+    now = utc_now_naive()
     entry = TimeEntry(
         client_id=client.id,
+        project_id=payload.project_id,
         date=now.date(),
         description=payload.description,
         duration_minutes=0,
-        hourly_rate=_default_rate(db, client),
+        hourly_rate=_default_rate(db, client, project),
         running_started_at=now,
     )
     db.add(entry)
@@ -148,7 +175,7 @@ def stop_timer(
         raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")
     if entry.running_started_at is None:
         raise HTTPException(status_code=400, detail="Timer läuft nicht")
-    elapsed = datetime.utcnow() - entry.running_started_at
+    elapsed = utc_now_naive() - entry.running_started_at
     entry.duration_minutes += max(1, round(elapsed.total_seconds() / 60))
     entry.running_started_at = None
     db.commit()

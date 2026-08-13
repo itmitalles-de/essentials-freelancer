@@ -1,8 +1,10 @@
 import os
 import uuid
+from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from PIL import Image, UnidentifiedImageError
 from sqlalchemy.orm import Session
 
 from app.config import settings as app_settings
@@ -19,6 +21,18 @@ ALLOWED_RECEIPT_TYPES = {
     "application/pdf": ".pdf",
 }
 MAX_RECEIPT_SIZE = 5 * 1024 * 1024
+
+
+def _validate_receipt_content(content: bytes, content_type: str) -> None:
+    if content_type == "application/pdf":
+        if not content.startswith(b"%PDF-"):
+            raise HTTPException(status_code=400, detail="Der Beleg ist keine gültige PDF-Datei")
+        return
+    try:
+        with Image.open(BytesIO(content)) as image:
+            image.verify()
+    except (UnidentifiedImageError, OSError):
+        raise HTTPException(status_code=400, detail="Der Beleg ist keine gültige Bilddatei")
 
 
 @router.get("", response_model=list[ExpenseOut])
@@ -68,10 +82,14 @@ def delete_expense(
     expense = db.get(Expense, expense_id)
     if expense is None:
         raise HTTPException(status_code=404, detail="Ausgabe nicht gefunden")
-    if expense.receipt_path and os.path.exists(expense.receipt_path):
-        os.remove(expense.receipt_path)
+    receipt_path = expense.receipt_path
     db.delete(expense)
     db.commit()
+    if receipt_path:
+        try:
+            os.remove(receipt_path)
+        except FileNotFoundError:
+            pass
 
 
 @router.post("/{expense_id}/receipt", response_model=ExpenseOut)
@@ -93,18 +111,34 @@ async def upload_receipt(
     content = await file.read()
     if len(content) > MAX_RECEIPT_SIZE:
         raise HTTPException(status_code=400, detail="Beleg darf maximal 5 MB groß sein")
+    _validate_receipt_content(content, file.content_type or "")
 
     os.makedirs(app_settings.pdf_storage_dir, exist_ok=True)
-    if expense.receipt_path and os.path.exists(expense.receipt_path):
-        os.remove(expense.receipt_path)
-
+    old_path = expense.receipt_path
     file_name = f"receipt-{uuid.uuid4().hex}{extension}"
     file_path = os.path.join(app_settings.pdf_storage_dir, file_name)
-    with open(file_path, "wb") as f:
-        f.write(content)
-
-    expense.receipt_path = file_path
-    db.commit()
+    temporary_path = f"{file_path}.tmp"
+    try:
+        with open(temporary_path, "xb") as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary_path, file_path)
+        expense.receipt_path = file_path
+        db.commit()
+    except Exception:
+        db.rollback()
+        for path in (temporary_path, file_path):
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+        raise
+    if old_path and old_path != file_path:
+        try:
+            os.remove(old_path)
+        except FileNotFoundError:
+            pass
     db.refresh(expense)
     return ExpenseOut.from_model(expense)
 

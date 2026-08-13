@@ -1,0 +1,64 @@
+import os
+import shutil
+import tempfile
+from collections.abc import Iterator
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+TEST_ROOT = Path(tempfile.mkdtemp(prefix="freelancer-tests-"))
+os.environ.update(
+    {
+        "DATABASE_URL": f"sqlite:///{TEST_ROOT / 'test.sqlite'}",
+        "JWT_SECRET": "test-only-jwt-secret",
+        "ADMIN_USERNAME": "test-admin",
+        "ADMIN_PASSWORD": "test-only-password",
+        "PDF_STORAGE_DIR": str(TEST_ROOT / "documents"),
+        "RUN_MIGRATIONS": "false",
+    }
+)
+
+from app.database import Base, SessionLocal, engine  # noqa: E402
+from app.main import app, seed_admin  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def reset_storage() -> Iterator[None]:
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    seed_admin()
+    documents = TEST_ROOT / "documents"
+    shutil.rmtree(documents, ignore_errors=True)
+    documents.mkdir(parents=True)
+    yield
+
+
+@pytest.fixture
+def client() -> Iterator[TestClient]:
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def auth_headers(client: TestClient) -> dict[str, str]:
+    response = client.post(
+        "/api/auth/login",
+        json={"username": "test-admin", "password": "test-only-password"},
+    )
+    assert response.status_code == 200
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+@pytest.fixture
+def db_session():
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+def pytest_sessionfinish(session, exitstatus):
+    engine.dispose()
+    shutil.rmtree(TEST_ROOT, ignore_errors=True)

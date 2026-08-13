@@ -11,6 +11,9 @@ node_modules/
 frontend/dist/
 frontend/tsconfig.tsbuildinfo
 
+# Local business-data exports (contain production data when run on a live host)
+backups/
+
 # Android / Gradle
 android/local.properties
 android/.gradle/

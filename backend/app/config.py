@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     smtp_use_tls: bool = True
 
     pdf_storage_dir: str = "/data/invoices"
+    run_migrations: bool = True
 
 
 settings = Settings()

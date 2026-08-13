@@ -1,10 +1,12 @@
-from datetime import date, datetime, timedelta
+import os
+from datetime import date, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from app.config import settings as app_settings
 from app.database import get_db
 from app.deps import get_current_user
 from app.email_utils import EmailNotConfigured, send_invoice_email
@@ -14,22 +16,29 @@ from app.models import (
     Invoice,
     InvoiceLineItem,
     InvoiceStatus,
+    Quote,
+    QuoteStatus,
     TimeEntry,
     User,
 )
 from app.pdf import generate_invoice_pdf
 from app.schemas import InvoiceCreate, InvoiceOut, InvoiceStatusUpdate
+from app.time_utils import utc_now_naive
 
 router = APIRouter(prefix="/api/invoices", tags=["invoices"])
 
 
-def _get_or_create_settings(db: Session) -> CompanySettings:
-    company = db.get(CompanySettings, 1)
+def _get_or_create_settings(
+    db: Session, *, lock_for_invoice_number: bool = False
+) -> CompanySettings:
+    query = db.query(CompanySettings).filter(CompanySettings.id == 1)
+    if lock_for_invoice_number:
+        query = query.with_for_update()
+    company = query.one_or_none()
     if company is None:
         company = CompanySettings(id=1)
         db.add(company)
-        db.commit()
-        db.refresh(company)
+        db.flush()
     return company
 
 
@@ -72,6 +81,7 @@ def create_invoice(
     entries = (
         db.query(TimeEntry)
         .filter(TimeEntry.id.in_(payload.time_entry_ids))
+        .with_for_update()
         .all()
     )
     if len(entries) != len(payload.time_entry_ids):
@@ -90,9 +100,15 @@ def create_invoice(
                 status_code=400, detail="Ein laufender Timer kann nicht abgerechnet werden"
             )
 
-    company = _get_or_create_settings(db)
+    # Serialize invoice-number allocation on PostgreSQL. This keeps the existing
+    # number series intact when two requests create an invoice concurrently.
+    company = _get_or_create_settings(db, lock_for_invoice_number=True)
     today = date.today()
-    due_days = payload.due_in_days or company.default_payment_terms_days
+    due_days = (
+        payload.due_in_days
+        if payload.due_in_days is not None
+        else company.default_payment_terms_days
+    )
     invoice_number = f"{company.invoice_number_prefix}-{today.year}-{company.next_invoice_number:04d}"
 
     invoice = Invoice(
@@ -117,8 +133,10 @@ def create_invoice(
             invoice_id=invoice.id,
             description=description,
             quantity=hours.quantize(Decimal("0.01")),
+            unit="hours",
             unit_price=rate,
             amount=amount,
+            project_id=entry.project_id,
         )
         db.add(line_item)
         total += amount
@@ -130,16 +148,31 @@ def create_invoice(
     db.flush()
     db.refresh(invoice)
 
+    expected_pdf_path = os.path.join(
+        app_settings.pdf_storage_dir, f"{invoice.invoice_number}.pdf"
+    )
     try:
         pdf_path = generate_invoice_pdf(invoice, client, company)
     except Exception as exc:
         db.rollback()
+        try:
+            os.remove(expected_pdf_path)
+        except FileNotFoundError:
+            pass
         raise HTTPException(
             status_code=500, detail=f"Rechnung konnte nicht erstellt werden (PDF-Fehler: {exc})"
         )
 
     invoice.pdf_path = pdf_path
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        try:
+            os.remove(pdf_path)
+        except FileNotFoundError:
+            pass
+        raise
     db.refresh(invoice)
     return invoice
 
@@ -151,7 +184,11 @@ def download_invoice_pdf(
     current_user: User = Depends(get_current_user),
 ):
     invoice = db.get(Invoice, invoice_id)
-    if invoice is None or not invoice.pdf_path:
+    if (
+        invoice is None
+        or not invoice.pdf_path
+        or not os.path.isfile(invoice.pdf_path)
+    ):
         raise HTTPException(status_code=404, detail="PDF nicht gefunden")
     return FileResponse(
         invoice.pdf_path,
@@ -193,7 +230,7 @@ def send_invoice(
         raise HTTPException(status_code=502, detail=f"Versand fehlgeschlagen: {exc}")
 
     invoice.status = InvoiceStatus.sent
-    invoice.sent_at = datetime.utcnow()
+    invoice.sent_at = utc_now_naive()
     db.commit()
     db.refresh(invoice)
     return invoice
@@ -224,7 +261,7 @@ def update_status(
         )
     invoice.status = payload.status
     if payload.status == InvoiceStatus.paid:
-        invoice.paid_at = datetime.utcnow()
+        invoice.paid_at = utc_now_naive()
     db.commit()
     db.refresh(invoice)
     return invoice
@@ -243,8 +280,19 @@ def delete_invoice(
         raise HTTPException(
             status_code=400, detail="Nur unversendete Entwürfe können gelöscht werden"
         )
+    pdf_path = invoice.pdf_path
     for entry in invoice.time_entries:
         entry.billed = False
         entry.invoice_id = None
+    if invoice.quote_id is not None:
+        quote = db.get(Quote, invoice.quote_id)
+        if quote is not None:
+            quote.status = QuoteStatus.accepted
+            quote.converted_invoice_id = None
     db.delete(invoice)
     db.commit()
+    if pdf_path:
+        try:
+            os.remove(pdf_path)
+        except FileNotFoundError:
+            pass

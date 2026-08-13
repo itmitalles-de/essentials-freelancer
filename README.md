@@ -1,69 +1,106 @@
 # Freelancer
 
-Zeiterfassung, Rechnungsstellung und Rechnungsversand für itmitalles — als Docker-App (Backend + Web-Frontend), Android-Client und separates Homer-Dashboard.
+Focused single-user time tracking, quoting, invoicing, and expense management
+for solo professionals. The product consists of a FastAPI/PostgreSQL backend, a
+React web application, an Android client for the established mobile flows, and
+an optional Homer dashboard.
 
-> **Hauptprojekt 1 von 3:** Freelancer ist das fokussierte Arbeits- und Abrechnungssystem für Solo-Selbstständige und Dienstleister. Produkt- und Shop-Prozesse gehören in die Shop Suite; Datei-, Mail- und Kollaborationsfunktionen in die Workspace Suite.
+Freelancer remains a single installation with one administrator. It is not a
+multi-tenant SaaS, shop system, inventory tool, or collaboration suite.
 
-**Aktueller Stand (2026-08-12):** Funktionsfähiger Single-User-MVP mit Kunden, Zeiterfassung, Rechnungen/PDF/SMTP, Ausgaben samt Beleg-Upload, Android-Client und Homer-Dashboard. Es fehlt noch eine belastbare automatische Test- und CI-Basis; vor größeren neuen Features hat Stabilisierung Vorrang.
+## Verified product scope
 
-## Funktionen
+- clients with contact data and individual hourly rates;
+- projects linked to exactly one client, with an optional project rate;
+- manual time entries and one global start/stop timer;
+- traceable client → project → time → invoice relationships;
+- quotes with line items, PDF, controlled status transitions, and one-time
+  conversion of an accepted quote into a draft invoice;
+- invoices generated from unbilled time or an accepted quote, with PDF,
+  SMTP delivery, and controlled draft/sent/paid/cancelled states;
+- expenses with PNG, JPEG, or PDF receipts up to 5 MiB;
+- company settings, logo, numbering prefixes, and a configurable invoice
+  footer;
+- Android login, time tracking, read-only clients, invoice list/PDF, and paid
+  status handling;
+- consistent PostgreSQL/document export and empty-target restore tooling.
 
-- Kunden verwalten (mit individuellem Stundensatz)
-- Zeit erfassen: Timer (Start/Stopp) oder manueller Eintrag
-- Aus offenen Zeiteinträgen eine Rechnung erstellen (PDF, Kleinunternehmerregelung §19 UStG)
-- Rechnungen per SMTP versenden, Status verfolgen (Entwurf/versendet/bezahlt)
-- Alle Rechnungen jederzeit abrufbar (Web + Android)
-- Android-App zum Zeiterfassen und Rechnungen einsehen unterwegs
-- Homer-Dashboard als zentrale Startseite für Freelancer-Werkzeuge und Infrastruktur
+The default invoice footer retains the deployment's existing small-business
+wording. It is configurable and is not tax or legal advice; operators are
+responsible for validating their own invoice requirements.
 
-## Web-Stack
+## Architecture and persistence
 
-- **Backend**: FastAPI (Python), PostgreSQL, PDF-Erzeugung mit reportlab, SMTP-Versand
-- **Frontend**: React + Vite + TypeScript, Dark Mode (System/Hell/Dunkel, persistiert)
-- **Dashboard**: Homer, konfiguriert unter `dashboard/assets/config.yml`
-- **Deployment**: Docker Compose (`db`, `backend`, `frontend`, `freelancer-dashboard`)
+- Backend: FastAPI, SQLAlchemy, Alembic, ReportLab, SMTP
+- Frontend: React, Vite, TypeScript
+- Android: Kotlin, Jetpack Compose
+- Database: PostgreSQL 16
+- Deployment: Docker Compose
+
+Existing internal identifiers remain intentionally stable:
+
+- PostgreSQL database/user: `tracker`
+- database volume: `tracker_db_data`
+- document volume: `tracker_invoices`
+- Android package: `de.itmitalles.tracker`
+
+The database volume stores all relational business data. The document volume
+stores invoice PDFs, quote PDFs, company logos, and expense receipts. A valid
+backup must contain both.
 
 ## Setup
 
 ```bash
 cp .env.example .env
-# .env anpassen: JWT_SECRET, ADMIN_PASSWORD, ggf. SMTP-Zugangsdaten
+# Replace every change-me value with a strong local secret.
 docker network inspect proxy_net >/dev/null 2>&1 || docker network create proxy_net
 docker compose up -d --build
 ```
 
-Danach ist die App unter `http://localhost:8080` erreichbar (Port über `FRONTEND_PORT` in `.env` konfigurierbar). Login mit `ADMIN_USERNAME`/`ADMIN_PASSWORD` aus der `.env`.
+The web application defaults to `http://localhost:8080`; the optional Homer
+dashboard defaults to `http://localhost:8081`. Port values are configurable in
+`.env`. Dashboard/Caddy details are in
+[`dashboard/README.md`](dashboard/README.md).
 
-Das Homer-Dashboard läuft standardmäßig unter `http://localhost:8081`. Details zu Domain, Caddy und Konfiguration stehen in [`dashboard/README.md`](dashboard/README.md).
+The backend runs additive Alembic migrations before accepting traffic. Migration
+`0001_existing_mvp` safely baselines a complete legacy database and creates the
+legacy schema only for a new empty database. Migration `0002_projects_quotes`
+adds project, quote, and traceability data without renaming or deleting legacy
+objects. Take a verified business-data export before deploying a migration.
 
-Firmendaten (Adresse, IBAN, Steuernummer, Rechnungstext) werden nach dem ersten Login unter **Einstellungen** gepflegt.
+SMTP is optional. Without `SMTP_HOST` and `SMTP_FROM`, invoice creation and PDF
+download remain available while the send endpoint returns a clear configuration
+error and leaves the invoice in draft state.
 
-### SMTP
+## Backup and restore
 
-Ohne gesetzte `SMTP_HOST`/`SMTP_FROM` funktioniert alles außer dem E-Mail-Versand (PDF-Download geht immer). Rechnungen können jederzeit nachträglich versendet werden, sobald SMTP konfiguriert ist.
+`scripts/export-business-data.sh` briefly stops the backend writer, exports a
+custom-format PostgreSQL dump plus the complete document volume, validates both,
+and writes checksums and a repository-revision manifest. It never exports
+`.env`. Detailed empty-target restore and encrypted-offsite guidance is in
+[`docs/BACKUP_RESTORE.md`](docs/BACKUP_RESTORE.md).
 
-## Android-App
+Local exports are written below ignored `backups/` by default. They contain
+business data and must not be committed. Offsite encryption, retention, and
+credential management use the explicitly configured restic/rclone target. The
+optional systemd service and timer in `deploy/` run the same verified export
+before creating and checking an encrypted offsite snapshot.
 
-Liegt in `android/`, Kotlin + Jetpack Compose (Material 3), MVVM.
+## Verification
 
-- Beim ersten Start: Server-URL (z.B. `https://tracker.itmitalles.de`), Benutzername, Passwort eingeben
-- Zeiterfassung mit Timer und manuellen Einträgen
-- Kundenliste (nur lesend)
-- Rechnungsliste inkl. PDF öffnen und „als bezahlt markieren“
-- Farbschema unter Einstellungen (System/Hell/Dunkel)
-
-Build lokal:
+The repository CI and local checks cover:
 
 ```bash
-cd android
-./gradlew assembleDebug
+docker build --target test -t freelancer-backend-test ./backend
+docker run --rm freelancer-backend-test
+cd frontend && npm ci && npm test && npm run build && npm audit --audit-level=moderate
+cd .. && POSTGRES_PASSWORD=local-check JWT_SECRET=local-check ADMIN_PASSWORD=local-check docker compose config -q
+bash -n scripts/*.sh
+./scripts/check-secrets.sh
+cd android && ./gradlew assembleDebug
 ```
 
-Debug-APK liegt danach unter `android/app/build/outputs/apk/debug/app-debug.apk`.
-
-## Architekturentscheidungen
-
-- Single-User: nur ein Admin-Zugang (aus `.env` geseedet), kein Multi-Tenant
-- Kleinunternehmerregelung (§19 UStG): keine Umsatzsteuer, entsprechender Hinweis auf jeder Rechnung
-- Rechnungsnummern sind fortlaufend (`<Präfix>-<Jahr>-<laufende Nummer>`), Zähler liegt in den Firmeneinstellungen
-- Homer enthält ausschließlich Links und öffentlich auslieferbare Darstellung; keine Zugangsdaten oder Tokens
+Host-dependent persistence, export/restore, SMTP, and full API smoke tests are
+deliberately not simulated in GitHub Actions. Run `scripts/smoke-test.sh` with
+test-only credentials against disposable Compose infrastructure for the
+customer → project → time → invoice → PDF and quote-conversion flow.

@@ -15,6 +15,7 @@ export interface Client {
 export interface TimeEntry {
   id: number;
   client_id: number;
+  project_id: number | null;
   date: string;
   description: string;
   duration_minutes: number;
@@ -22,6 +23,16 @@ export interface TimeEntry {
   running_started_at: string | null;
   billed: boolean;
   invoice_id: number | null;
+}
+
+export interface Project {
+  id: number;
+  client_id: number;
+  name: string;
+  description: string;
+  hourly_rate: string | null;
+  active: boolean;
+  created_at: string;
 }
 
 export type InvoiceStatus = "draft" | "sent" | "paid" | "cancelled";
@@ -32,6 +43,8 @@ export interface InvoiceLineItem {
   quantity: string;
   unit_price: string;
   amount: string;
+  unit: string;
+  project_id: number | null;
 }
 
 export interface Invoice {
@@ -46,7 +59,34 @@ export interface Invoice {
   sent_at: string | null;
   paid_at: string | null;
   created_at: string;
+  quote_id: number | null;
   line_items: InvoiceLineItem[];
+}
+
+export type QuoteStatus = "draft" | "sent" | "accepted" | "rejected" | "converted";
+
+export interface QuoteLineItem {
+  id: number;
+  description: string;
+  quantity: string;
+  unit: string;
+  unit_price: string;
+  amount: string;
+}
+
+export interface Quote {
+  id: number;
+  client_id: number;
+  project_id: number | null;
+  quote_number: string;
+  issue_date: string;
+  valid_until: string;
+  status: QuoteStatus;
+  total: string;
+  notes: string;
+  converted_invoice_id: number | null;
+  created_at: string;
+  line_items: QuoteLineItem[];
 }
 
 export interface Expense {
@@ -73,8 +113,10 @@ export interface CompanySettings {
   bank_name: string;
   invoice_footer_note: string;
   invoice_number_prefix: string;
+  quote_number_prefix: string;
   default_hourly_rate: string;
   default_payment_terms_days: number;
   next_invoice_number: number;
+  next_quote_number: number;
   has_logo: boolean;
 }

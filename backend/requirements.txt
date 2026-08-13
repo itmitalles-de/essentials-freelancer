@@ -9,3 +9,4 @@ bcrypt==4.2.1
 reportlab==4.2.5
 pillow==11.0.0
 python-multipart==0.0.20
+alembic==1.19.1
