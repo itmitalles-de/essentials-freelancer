@@ -82,7 +82,9 @@ and writes checksums and a repository-revision manifest. It never exports
 
 Local exports are written below ignored `backups/` by default. They contain
 business data and must not be committed. Offsite encryption, retention, and
-credential management must use an explicitly selected external backup system.
+credential management use the explicitly configured restic/rclone target. The
+optional systemd service and timer in `deploy/` run the same verified export
+before creating and checking an encrypted offsite snapshot.
 
 ## Verification
 

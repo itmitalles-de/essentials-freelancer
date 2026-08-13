@@ -1,0 +1,19 @@
+[Unit]
+Description=Freelancer encrypted offsite backup
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=tim
+Group=tim
+Environment=PATH=/home/tim/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=FREELANCER_BACKUP_CONFIG=/etc/freelancer-backup.env
+ExecStart=/opt/tracker/scripts/offsite-backup.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+[Install]
+WantedBy=multi-user.target

@@ -22,8 +22,17 @@ using the organization's approved backup tool. Encryption keys and the `.env`
 belong in separate protected secret management, not inside this export or Git.
 
 Retention, encryption, upload, and pruning are intentionally outside this
-repository because the offsite provider has not been selected. Do not add a
-provider-specific credential workaround to this stack.
+repository until an offsite provider has been selected. Once selected,
+`scripts/offsite-backup.sh` combines the consistent export with an encrypted
+restic snapshot, repository verification, and retention. It reads paths and the
+repository URL from `/etc/freelancer-backup.env`; credentials remain in the
+referenced mode-0600 restic password and rclone configuration files.
+
+The deployment includes a daily systemd service/timer and an environment-file
+example in `deploy/`. Before enabling the timer, initialize the restic
+repository, run the service manually, verify the remote snapshot, and complete
+an empty-target restore rehearsal. A successful timer status alone is not a
+restore test.
 
 ## Restore rehearsal
 
