@@ -64,8 +64,7 @@ test("normal navigation follows module state and core data is visible", async ({
   await expectNoSeriousAccessibilityViolations(page);
 });
 
-test("restored core data remains visible through the browser", async ({ page }) => {
-  test.skip(process.env.E2E_PHASE !== "restore", "restore-only assertion");
+test("core data remains visible through the browser", async ({ page }) => {
   await login(page);
   await page.getByRole("link", { name: "Kunden" }).click();
   await expect(page.getByRole("cell", { name: "Synthetic Full Check Client", exact: true })).toBeVisible();
