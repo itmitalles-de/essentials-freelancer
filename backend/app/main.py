@@ -11,11 +11,13 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import Base, SessionLocal, engine, get_db
 from app.models import CompanySettings, User
+from app.module_service import reconcile_module_installations
 from app.routers import (
     auth,
     clients,
     expenses,
     invoices,
+    modules,
     projects,
     quotes,
     settings as settings_router,
@@ -37,6 +39,7 @@ def seed_admin() -> None:
         if db.get(CompanySettings, 1) is None:
             db.add(CompanySettings(id=1))
         db.commit()
+        reconcile_module_installations(db)
     finally:
         db.close()
 
@@ -59,7 +62,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="itmitalles tracker", lifespan=lifespan)
+app = FastAPI(title="Essentials+ Freelancer", version="0.2.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -77,6 +80,7 @@ app.include_router(projects.router)
 app.include_router(quotes.router)
 app.include_router(expenses.router)
 app.include_router(settings_router.router)
+app.include_router(modules.router)
 
 
 @app.get("/api/health")

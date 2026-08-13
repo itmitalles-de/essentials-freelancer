@@ -3,10 +3,12 @@ import { useAuth } from "../contexts/AuthContext";
 import { useLanguage } from "../contexts/LanguageContext";
 import { ThemeToggle } from "./ThemeToggle";
 import { LanguageToggle } from "./LanguageToggle";
+import { useModules } from "../contexts/ModulesContext";
 
 export function Layout() {
   const { username, logout } = useAuth();
   const { t } = useLanguage();
+  const { isEnabled } = useModules();
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
@@ -22,16 +24,17 @@ export function Layout() {
       >
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
           <img src="/icon.svg" alt="" width={24} height={24} />
-          <span style={{ fontWeight: 700 }}>freelancer</span>
+          <span style={{ fontWeight: 700 }}>Essentials+ Freelancer</span>
         </div>
-        <NavItem to="/">{t("nav.dashboard")}</NavItem>
-        <NavItem to="/clients">{t("nav.clients")}</NavItem>
-        <NavItem to="/projects">{t("nav.projects")}</NavItem>
-        <NavItem to="/time">{t("nav.time")}</NavItem>
-        <NavItem to="/quotes">{t("nav.quotes")}</NavItem>
-        <NavItem to="/invoices">{t("nav.invoices")}</NavItem>
-        <NavItem to="/expenses">{t("nav.expenses")}</NavItem>
-        <NavItem to="/settings">{t("nav.settings")}</NavItem>
+        {isEnabled("core.reporting") && <NavItem to="/">{t("nav.dashboard")}</NavItem>}
+        {isEnabled("core.clients") && <NavItem to="/clients">{t("nav.clients")}</NavItem>}
+        {isEnabled("core.projects") && <NavItem to="/projects">{t("nav.projects")}</NavItem>}
+        {isEnabled("core.time_tracking") && <NavItem to="/time">{t("nav.time")}</NavItem>}
+        {isEnabled("sales.quotes") && <NavItem to="/quotes">{t("nav.quotes")}</NavItem>}
+        {isEnabled("billing.invoices") && <NavItem to="/invoices">{t("nav.invoices")}</NavItem>}
+        {isEnabled("expenses.receipts") && <NavItem to="/expenses">{t("nav.expenses")}</NavItem>}
+        {isEnabled("core.platform") && <NavItem to="/settings">{t("nav.settings")}</NavItem>}
+        <NavItem to="/admin/modules">Admin-Center</NavItem>
         <div style={{ flex: 1 }} />
         <div style={{ fontSize: "0.85rem", color: "var(--fg-muted)" }}>{username}</div>
         <ThemeToggle />

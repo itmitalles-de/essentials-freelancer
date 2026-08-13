@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings as app_settings
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_module
 from app.models import (
     Client,
     Invoice,
@@ -25,7 +25,11 @@ from app.pdf import generate_invoice_pdf, generate_quote_pdf
 from app.routers.invoices import _get_or_create_settings
 from app.schemas import QuoteCreate, QuoteOut, QuoteStatusUpdate
 
-router = APIRouter(prefix="/api/quotes", tags=["quotes"])
+router = APIRouter(
+    prefix="/api/quotes",
+    tags=["quotes"],
+    dependencies=[Depends(require_module("sales.quotes"))],
+)
 
 
 def _client_and_project(

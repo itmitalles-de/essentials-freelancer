@@ -9,11 +9,15 @@ from sqlalchemy.orm import Session
 
 from app.config import settings as app_settings
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_module
 from app.models import Expense, User
 from app.schemas import ExpenseCreate, ExpenseOut
 
-router = APIRouter(prefix="/api/expenses", tags=["expenses"])
+router = APIRouter(
+    prefix="/api/expenses",
+    tags=["expenses"],
+    dependencies=[Depends(require_module("expenses.receipts"))],
+)
 
 ALLOWED_RECEIPT_TYPES = {
     "image/png": ".png",

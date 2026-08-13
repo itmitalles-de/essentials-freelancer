@@ -30,7 +30,11 @@ def send_invoice_email(
             filename=pdf_filename,
         )
 
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
+    with smtplib.SMTP(
+        settings.smtp_host,
+        settings.smtp_port,
+        timeout=settings.smtp_timeout_seconds,
+    ) as server:
         if settings.smtp_use_tls:
             server.starttls()
         if settings.smtp_user and settings.smtp_password:

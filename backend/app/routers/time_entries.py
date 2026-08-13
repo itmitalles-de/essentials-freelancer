@@ -3,7 +3,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_module
 from app.models import Client, CompanySettings, Project, TimeEntry, User
 from app.schemas import (
     TimeEntryCreate,
@@ -13,7 +13,11 @@ from app.schemas import (
 )
 from app.time_utils import utc_now_naive
 
-router = APIRouter(prefix="/api/time-entries", tags=["time-entries"])
+router = APIRouter(
+    prefix="/api/time-entries",
+    tags=["time-entries"],
+    dependencies=[Depends(require_module("core.time_tracking"))],
+)
 
 
 def _project_for_client(

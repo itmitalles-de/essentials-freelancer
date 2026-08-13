@@ -120,3 +120,53 @@ export interface CompanySettings {
   next_quote_number: number;
   has_logo: boolean;
 }
+
+export type ModuleState =
+  | "not_installed"
+  | "needs_configuration"
+  | "disabled"
+  | "enabled"
+  | "degraded";
+
+export interface ModuleRequirement {
+  key: string;
+  label: string;
+  required: boolean;
+  source: string;
+}
+
+export interface ModuleManifest {
+  id: string;
+  schema_version: number;
+  display_name: string;
+  description: string;
+  group: string;
+  module_type: "core" | "built_in" | "connector" | "custom";
+  required: boolean;
+  default_state: ModuleState;
+  dependencies: string[];
+  conflicts: string[];
+  compatible_product_versions: string;
+  compatible_schema_versions: string;
+  configuration_fields: ModuleRequirement[];
+  secret_requirements: ModuleRequirement[];
+  api_boundaries: string[];
+  navigation_boundaries: string[];
+  job_boundaries: string[];
+  healthcheck: string;
+  data_ownership: string[];
+  export_behavior: string;
+  backup_behavior: string;
+  restore_behavior: string;
+  activation_behavior: string;
+  deactivation_behavior: string;
+  update_behavior: string;
+}
+
+export interface ModuleStatus {
+  manifest: ModuleManifest;
+  state: ModuleState;
+  configuration: { key: string; configured: boolean }[];
+  secrets: { key: string; configured: boolean }[];
+  health: { status: string; message: string };
+}

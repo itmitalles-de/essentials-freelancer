@@ -19,6 +19,18 @@ class ApiError extends Error {
   }
 }
 
+function errorMessage(body: unknown, fallback: string): string {
+  if (!body || typeof body !== "object") return fallback;
+  const candidate = body as {
+    detail?: string | { message?: string };
+    error?: { message?: string };
+  };
+  if (typeof candidate.detail === "string") return candidate.detail;
+  if (candidate.detail?.message) return candidate.detail.message;
+  if (candidate.error?.message) return candidate.error.message;
+  return fallback;
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
@@ -42,7 +54,7 @@ async function request<T>(
     let detail = res.statusText;
     try {
       const body = await res.json();
-      detail = body.detail ?? detail;
+      detail = errorMessage(body, detail);
     } catch {
       /* ignore */
     }
@@ -102,7 +114,7 @@ export async function uploadCompanyLogo<T>(file: File): Promise<T> {
     let detail = res.statusText;
     try {
       const body = await res.json();
-      detail = body.detail ?? detail;
+      detail = errorMessage(body, detail);
     } catch {
       /* ignore */
     }
@@ -135,7 +147,7 @@ export async function uploadExpenseReceipt<T>(expenseId: number, file: File): Pr
     let detail = res.statusText;
     try {
       const body = await res.json();
-      detail = body.detail ?? detail;
+      detail = errorMessage(body, detail);
     } catch {
       /* ignore */
     }

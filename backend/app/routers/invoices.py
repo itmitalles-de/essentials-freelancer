@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings as app_settings
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_module
 from app.email_utils import EmailNotConfigured, send_invoice_email
 from app.models import (
     Client,
@@ -25,7 +25,11 @@ from app.pdf import generate_invoice_pdf
 from app.schemas import InvoiceCreate, InvoiceOut, InvoiceStatusUpdate
 from app.time_utils import utc_now_naive
 
-router = APIRouter(prefix="/api/invoices", tags=["invoices"])
+router = APIRouter(
+    prefix="/api/invoices",
+    tags=["invoices"],
+    dependencies=[Depends(require_module("billing.invoices"))],
+)
 
 
 def _get_or_create_settings(
@@ -197,7 +201,11 @@ def download_invoice_pdf(
     )
 
 
-@router.post("/{invoice_id}/send", response_model=InvoiceOut)
+@router.post(
+    "/{invoice_id}/send",
+    response_model=InvoiceOut,
+    dependencies=[Depends(require_module("communication.smtp"))],
+)
 def send_invoice(
     invoice_id: int,
     db: Session = Depends(get_db),

@@ -54,6 +54,76 @@ body {
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.muted {
+  color: var(--fg-muted);
+}
+
+.alert.error {
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  padding: 0.75rem;
+  color: var(--danger);
+}
+
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.module-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.module-card h4,
+.module-card p {
+  margin: 0;
+}
+
+.module-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.module-enabled { background: var(--success); color: #06210f; }
+.module-disabled, .module-not_installed { background: var(--border); color: var(--fg); }
+.module-needs_configuration, .module-degraded { background: var(--warning); color: #1a1200; }
+
+.configuration-gap {
+  border-left: 3px solid var(--warning);
+  padding-left: 0.5rem;
+}
+
+.module-contract {
+  display: grid;
+  grid-template-columns: minmax(7rem, auto) 1fr;
+  gap: 0.35rem 0.75rem;
+}
+
+.module-contract dt {
+  color: var(--fg-muted);
+  font-weight: 600;
+}
+
+.module-contract dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.module-actions {
+  margin-top: auto;
+}
+
 a {
   color: var(--accent);
   text-decoration: none;

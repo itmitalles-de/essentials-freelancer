@@ -3,7 +3,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import User
+from app.models import ModuleInstallation, User
+from app.module_service import ensure_module_available
 from app.security import decode_access_token
 
 bearer_scheme = HTTPBearer()
@@ -25,3 +26,14 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Benutzer nicht gefunden"
         )
     return user
+
+
+def require_module(module_id: str):
+    def dependency(
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+    ) -> ModuleInstallation:
+        del current_user
+        return ensure_module_available(db, module_id)
+
+    return dependency

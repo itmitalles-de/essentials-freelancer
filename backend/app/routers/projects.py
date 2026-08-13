@@ -2,11 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_module
 from app.models import Client, InvoiceLineItem, Project, Quote, TimeEntry, User
 from app.schemas import ProjectCreate, ProjectOut
 
-router = APIRouter(prefix="/api/projects", tags=["projects"])
+router = APIRouter(
+    prefix="/api/projects",
+    tags=["projects"],
+    dependencies=[Depends(require_module("core.projects"))],
+)
 
 
 def _client_or_404(db: Session, client_id: int) -> Client:

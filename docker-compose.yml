@@ -31,6 +31,9 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-}
       SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      SMTP_TIMEOUT_SECONDS: ${SMTP_TIMEOUT_SECONDS:-10}
+      OFFSITE_REPOSITORY_CONFIGURED: ${OFFSITE_REPOSITORY_CONFIGURED:-false}
+      OFFSITE_PASSWORD_FILE_CONFIGURED: ${OFFSITE_PASSWORD_FILE_CONFIGURED:-false}
       PDF_STORAGE_DIR: /data/invoices
     volumes:
       - tracker_invoices:/data/invoices

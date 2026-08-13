@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     smtp_password: str | None = None
     smtp_from: str | None = None
     smtp_use_tls: bool = True
+    smtp_timeout_seconds: float = 10.0
+
+    # The backend only needs readiness indicators for the host-managed restic
+    # configuration. Repository locations and password material stay outside
+    # the application and are never exposed through the API.
+    offsite_repository_configured: bool = False
+    offsite_password_file_configured: bool = False
 
     pdf_storage_dir: str = "/data/invoices"
     run_migrations: bool = True

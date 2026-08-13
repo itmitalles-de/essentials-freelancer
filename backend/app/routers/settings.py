@@ -7,11 +7,15 @@ from sqlalchemy.orm import Session
 
 from app.config import settings as app_settings
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_module
 from app.models import CompanySettings, User
 from app.schemas import CompanySettingsOut, CompanySettingsUpdate
 
-router = APIRouter(prefix="/api/settings", tags=["settings"])
+router = APIRouter(
+    prefix="/api/settings",
+    tags=["settings"],
+    dependencies=[Depends(require_module("core.platform"))],
+)
 
 ALLOWED_LOGO_TYPES = {
     "image/png": ".png",

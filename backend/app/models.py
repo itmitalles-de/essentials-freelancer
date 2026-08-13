@@ -3,6 +3,7 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     Enum,
@@ -250,4 +251,38 @@ class Expense(Base):
     category: Mapped[str] = mapped_column(String(64), default="")
     amount: Mapped[float] = mapped_column(Numeric(10, 2))
     receipt_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+
+
+class ModuleInstallation(Base):
+    __tablename__ = "module_installations"
+
+    module_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    manifest_schema_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    state: Mapped[str] = mapped_column(String(32), nullable=False)
+    configuration_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utc_now_naive, onupdate=utc_now_naive
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('not_installed', 'needs_configuration', 'disabled', 'enabled', 'degraded')",
+            name="ck_module_installations_state",
+        ),
+    )
+
+
+class ModuleAuditEvent(Base):
+    __tablename__ = "module_audit_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    module_id: Mapped[str] = mapped_column(
+        ForeignKey("module_installations.module_id"), index=True
+    )
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    previous_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    resulting_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
