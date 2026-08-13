@@ -14,8 +14,10 @@ The legacy PostgreSQL database/user `tracker`, volumes `tracker_db_data` and
 
 ## Baseline and workstream
 
-- Baseline/default branch: `master` at `ed28b555cd6e521fd96eb19ab6e2100f90d1e63f`
-  (merged PR #1, 2026-08-13).
+- Baseline/default branch at work start: `master` at
+  `31421a8b6a56f19dc4b45bb75ff3cf548544c809` (agent-context documentation),
+  based on product stabilization merge `ed28b555cd6e521fd96eb19ab6e2100f90d1e63f`
+  (PR #1, 2026-08-13).
 - Baseline evidence: the existing focused backend, frontend, Compose/static and
   Android checks were green locally and in the GitHub CI run for that revision.
 - No open issue or pull request existed when this workstream started.
