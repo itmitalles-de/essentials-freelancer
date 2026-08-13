@@ -1,11 +1,11 @@
-# Freelancer
+# Essentials+ Freelancer
 
 Focused single-user time tracking, quoting, invoicing, and expense management
 for solo professionals. The product consists of a FastAPI/PostgreSQL backend, a
 React web application, an Android client for the established mobile flows, and
 an optional Homer dashboard.
 
-Freelancer remains a single installation with one administrator. It is not a
+Essentials+ Freelancer remains a single installation with one administrator. It is not a
 multi-tenant SaaS, shop system, inventory tool, or collaboration suite.
 
 ## Verified product scope
@@ -16,11 +16,19 @@ multi-tenant SaaS, shop system, inventory tool, or collaboration suite.
 - traceable client → project → time → invoice relationships;
 - quotes with line items, PDF, controlled status transitions, and one-time
   conversion of an accepted quote into a draft invoice;
+- a deterministic, optional quote assistant with versioned catalog prices,
+  packages, templates, transparent Decimal calculations, immutable snapshots,
+  and mandatory human approval;
 - invoices generated from unbilled time or an accepted quote, with PDF,
   SMTP delivery, and controlled draft/sent/paid/cancelled states;
 - expenses with PNG, JPEG, or PDF receipts up to 5 MiB;
 - company settings, logo, numbering prefixes, and a configurable invoice
   footer;
+- a server-enforced Essentials+ module catalog and grouped Admin Center with
+  dependencies, configuration/health states, idempotent audited transitions,
+  navigation guards, and non-destructive deactivation;
+- filtered operational reporting for time, quote conversion, invoice status and
+  amounts, and expenses, including CSV exports without tax or legal advice;
 - Android login, time tracking, read-only clients, invoice list/PDF, and paid
   status handling;
 - consistent PostgreSQL/document export and empty-target restore tooling.
@@ -64,9 +72,11 @@ dashboard defaults to `http://localhost:8081`. Port values are configurable in
 
 The backend runs additive Alembic migrations before accepting traffic. Migration
 `0001_existing_mvp` safely baselines a complete legacy database and creates the
-legacy schema only for a new empty database. Migration `0002_projects_quotes`
-adds project, quote, and traceability data without renaming or deleting legacy
-objects. Take a verified business-data export before deploying a migration.
+legacy schema only for a new empty database. Later migrations add projects and
+quotes (`0002`), module state/audit data (`0003`), versioned quote-assistant
+snapshots (`0004`), and operational constraints, indexes, and idempotency keys
+(`0005`) without renaming legacy compatibility objects. Take a verified
+business-data export before deploying a migration.
 
 SMTP is optional. Without `SMTP_HOST` and `SMTP_FROM`, invoice creation and PDF
 download remain available while the send endpoint returns a clear configuration
@@ -86,21 +96,29 @@ credential management use the explicitly configured restic/rclone target. The
 optional systemd service and timer in `deploy/` run the same verified export
 before creating and checking an encrypted offsite snapshot.
 
-## Verification
+## Reproducible verification
 
-The repository CI and local checks cover:
+The primary acceptance entry point is:
 
 ```bash
-docker build --target test -t freelancer-backend-test ./backend
-docker run --rm freelancer-backend-test
-cd frontend && npm ci && npm test && npm run build && npm audit --audit-level=moderate
-cd .. && POSTGRES_PASSWORD=local-check JWT_SECRET=local-check ADMIN_PASSWORD=local-check docker compose config -q
-bash -n scripts/*.sh
-./scripts/check-secrets.sh
-cd android && ./gradlew assembleDebug
+make full-check
 ```
 
-Host-dependent persistence, export/restore, SMTP, and full API smoke tests are
-deliberately not simulated in GitHub Actions. Run `scripts/smoke-test.sh` with
-test-only credentials against disposable Compose infrastructure for the
-customer → project → time → invoice → PDF and quote-conversion flow.
+It creates random synthetic credentials, Compose project names, ports, volumes,
+and an isolated proxy network. It runs backend and migration tests, frontend
+tests/build/audit, Android JVM tests/debug assembly, Compose/static/secret
+checks, the complete API/PDF/SMTP flow, Playwright navigation and axe checks,
+business export, an encrypted local restic snapshot, and restore into a second
+empty Compose installation. Database counts, document checksums, schema and
+repository revisions, restored APIs, and restored browser views are compared.
+The trap removes the temporary stacks, volumes, networks, images, credentials,
+and artifacts on success or failure.
+
+Required host tools are Docker with Compose, Bash, Python 3, Node.js/npm, JDK 17
+plus an Android SDK, `restic`, `pdftotext`, and Chrome/Chromium. CI runs this
+same target in addition to the focused jobs.
+
+SMTP and offsite storage in `make full-check` are local simulators. A green run
+does not prove delivery by a real SMTP provider, recoverability from a real
+remote restic target, public proxy/DNS/TLS, or the revision deployed in
+production. See [`docs/VERIFICATION_MATRIX.md`](docs/VERIFICATION_MATRIX.md).

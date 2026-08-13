@@ -2,7 +2,7 @@
 
 ## Overview
 
-Freelancer is a Docker Compose application with a FastAPI/PostgreSQL backend, a
+Essentials+ Freelancer is a Docker Compose application with a FastAPI/PostgreSQL backend, a
 React web client, a Kotlin Android client, and an optional Homer dashboard.
 `README.md` is the authoritative product/setup overview and
 `docs/BACKUP_RESTORE.md` is the authoritative recovery guide; this file is a
@@ -23,6 +23,8 @@ navigation map, not a duplicate specification.
 - **Operations (`scripts/`, `deploy/`)**: smoke testing, secret scanning,
   consistent export/restore, encrypted offsite upload, and optional systemd
   scheduling.
+- **Acceptance (`tests/full-check/`, `frontend/e2e/`)**: generated-data API/PDF
+  and SMTP fixtures plus Playwright/axe checks orchestrated by `make full-check`.
 
 ## Data flow and responsibilities
 
@@ -39,6 +41,10 @@ Core business relationships are implemented in `backend/app/models.py`:
 - quotes belong to a client/project and can create one linked draft invoice;
 - expenses may reference uploaded receipts;
 - singleton company settings own prefixes, counters, defaults, and logo path.
+- module installations and audit events own the server-enforced Essentials+
+  feature state; manifests themselves remain version-controlled code;
+- quote-assistant catalogs, versions, packages, templates, drafts, and line/tax
+  snapshots retain deterministic inputs independently of later catalog edits.
 
 Invoicing from time locks selected entries, rejects running/already-billed or
 cross-client entries, computes Decimal amounts, links them to the invoice, and
@@ -46,6 +52,16 @@ generates its PDF in one transaction boundary. PDF failure rolls database state
 back and removes the expected file. Deleting an unsent draft unbills its time;
 sent/paid/cancelled documents cannot follow that path. Quote conversion uses
 row locks and unique links to prevent duplicate conversion.
+
+Protected routers call the module guard after authentication. Optional
+navigation is derived from the same authenticated module catalog. Host-side
+export/restic jobs query persisted module state after database readiness; the
+Admin Center changes state but never runs shell commands. Module deactivation
+blocks new owned operations and jobs while leaving rows and documents intact.
+
+Operational reports are read models computed from existing time, quote,
+invoice, project/client, and expense tables. Filtered CSV endpoints use the
+same filters and do not create a parallel reporting store.
 
 ## Runtime and deployment
 
@@ -65,7 +81,8 @@ current production runtime.
 ## Persistence and recovery
 
 - `tracker_db_data`: all relational users, settings, customers, projects, time,
-  quotes, invoices, line items, and expenses.
+  quotes, quote-assistant versions/snapshots, invoices, line items, expenses,
+  module state/audit, and idempotency records.
 - `tracker_invoices`: invoice/quote PDFs, company logos, and expense receipts.
 
 Both volumes are required for recovery. `scripts/export-business-data.sh`
@@ -78,24 +95,33 @@ configuration, never in Git.
 
 Startup seeds the configured administrator when absent. Login issues a JWT used
 for protected routes. This is a single-admin system, not tenant isolation.
-Secrets enter through `.env` or protected offsite host files. Uploaded receipts
-are size/type constrained by the backend, and all business exports are
+Secrets enter through `.env` or protected offsite host files. Module API
+responses contain requirement keys and configured booleans, never values.
+Uploaded receipts are bounded and checked against allowed extension, declared
+MIME, and file signature. API responses add request IDs/security headers and
+structured errors; rate limits cover login and SMTP send. Logs record route
+templates rather than query strings or request bodies. All business exports are
 sensitive. Homer assets are public to the browser and may contain no secrets.
 
 ## Testing
 
-- `backend/tests/`: auth/clients, time/invoices, projects/quotes, expenses, and
-  migration behavior in the backend test image.
-- `frontend/tests/`: API, login, invoice, and quote flows plus TypeScript/Vite
-  build validation.
-- `.github/workflows/ci.yml`: backend, frontend, Compose/static, and Android
-  assembly jobs.
-- `scripts/smoke-test.sh`: disposable API/PDF flow through client, project,
-  time, invoice, and quote conversion.
+- `backend/tests/`: 36 auth/business/module/assistant/reporting/security/schema
+  tests, including migration and concurrency/idempotency behavior.
+- `frontend/tests/`: component/API/calculation tests plus TypeScript/Vite build
+  validation; `frontend/e2e/` covers authenticated module navigation, restored
+  data, and axe accessibility checks.
+- `android/app/src/test/`: focused JVM compatibility tests; CI also assembles the
+  debug APK.
+- `tests/full-check/`: complete generated API/PDF/SMTP flow and a programmable
+  local SMTP fixture.
+- `scripts/full-check.sh`: random disposable source/restore stacks, export,
+  encrypted local restic snapshot/restore, count/checksum/revision comparison,
+  and reliable cleanup.
+- `.github/workflows/ci.yml`: focused backend/frontend/Compose/Android jobs plus
+  the same full acceptance target.
 
-CI does not simulate production volumes, SMTP, proxy/DNS, offsite recovery, or
-an empty-target restore. Android has assembly coverage but no committed
-behavioral test suite.
+No automated repository test proves a real SMTP provider, remote offsite
+storage, public proxy/DNS/TLS, production data, or the deployed revision.
 
 ## Important constraints
 

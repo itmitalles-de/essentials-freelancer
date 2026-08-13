@@ -1,7 +1,7 @@
 ---
-title: "Freelancer Dashboard"
+title: "Essentials+ Freelancer Dashboard"
 subtitle: "IT mit alles · Zentrale Arbeitsoberfläche"
-documentTitle: "Freelancer Dashboard"
+documentTitle: "Essentials+ Freelancer Dashboard"
 icon: "fas fa-terminal"
 
 header: true
@@ -60,10 +60,10 @@ links:
     target: "_blank"
 
 services:
-  - name: "Freelancer"
+  - name: "Essentials+ Freelancer"
     icon: "fas fa-briefcase"
     items:
-      - name: "Freelancer"
+      - name: "Essentials+ Freelancer"
         icon: "fas fa-gauge-high"
         subtitle: "Zeiterfassung und Rechnungen"
         tag: "App"
@@ -154,7 +154,7 @@ services:
         target: "_blank"
       - name: "GitHub"
         icon: "fab fa-github"
-        subtitle: "Freelancer-Repository"
+        subtitle: "Essentials+ Freelancer Repository"
         tag: "Code"
         tagstyle: "is-dark"
         url: "https://github.com/itmitalles-de/freelancer"
