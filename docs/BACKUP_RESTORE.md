@@ -27,6 +27,8 @@ repository until an offsite provider has been selected. Once selected,
 restic snapshot, repository verification, and retention. It reads paths and the
 repository URL from `/etc/freelancer-backup.env`; credentials remain in the
 referenced mode-0600 restic password and rclone configuration files.
+The environment file itself must also be mode 0600 and owned by the service
+user declared in `freelancer-backup.service`.
 
 The deployment includes a daily systemd service/timer and an environment-file
 example in `deploy/`. Before enabling the timer, initialize the restic

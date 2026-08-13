@@ -37,7 +37,7 @@ fi
 
 "$SCRIPT_DIR/export-business-data.sh" "$LOCAL_EXPORT_ROOT"
 latest_export=$(find "$LOCAL_EXPORT_ROOT" -mindepth 1 -maxdepth 1 -type d \
-  -name '20????????T??????Z' -printf '%f\t%p\n' | sort | tail -n 1 | cut -f 2-)
+  -name '20??????T??????Z' -printf '%f\t%p\n' | sort | tail -n 1 | cut -f 2-)
 [ -n "$latest_export" ] || die 'no completed export was found'
 
 restic backup --tag freelancer -- "$latest_export"
