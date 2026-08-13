@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import Base, SessionLocal, engine, get_db
+from app.deps import get_current_user, require_module
 from app.models import CompanySettings, User
 from app.module_registry import SCHEMA_VERSION
 from app.module_service import reconcile_module_installations
@@ -208,4 +209,26 @@ def readiness(db: Session = Depends(get_db)):
         "database": "ready",
         "schema_revision": revision,
         "expected_schema_revision": SCHEMA_VERSION,
+    }
+
+
+@app.get(
+    "/api/meta",
+    dependencies=[Depends(require_module("core.platform"))],
+)
+def metadata(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    del current_user
+    revision = (
+        db.execute(text("SELECT version_num FROM alembic_version")).scalar()
+        if settings.run_migrations
+        else "metadata"
+    )
+    return {
+        "product": "Essentials+ Freelancer",
+        "product_version": app.version,
+        "schema_revision": revision,
+        "repository_revision": settings.repository_revision,
     }

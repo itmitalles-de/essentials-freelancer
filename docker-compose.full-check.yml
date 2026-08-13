@@ -1,0 +1,29 @@
+services:
+  backend:
+    environment:
+      SMTP_HOST: smtp-fixture
+      SMTP_PORT: 1025
+      SMTP_FROM: freelancer@example.invalid
+      SMTP_USE_TLS: "false"
+      SMTP_TIMEOUT_SECONDS: 1
+      SMTP_RATE_LIMIT_PER_MINUTE: 100
+    depends_on:
+      smtp-fixture:
+        condition: service_healthy
+
+  smtp-fixture:
+    build: ./tests/full-check/smtp-fixture
+    restart: unless-stopped
+    expose:
+      - "1025"
+      - "8025"
+    ports:
+      - "${SMTP_HTTP_PORT:-8025}:8025"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8025/health', timeout=1)"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  freelancer-dashboard:
+    profiles: ["dashboard"]

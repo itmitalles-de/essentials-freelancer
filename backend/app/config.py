@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # Comma-separated browser origins. Empty keeps the default same-origin
     # deployment closed while native clients remain unaffected.
     cors_allowed_origins: str = ""
+    repository_revision: str = "unknown"
 
     # The backend only needs readiness indicators for the host-managed restic
     # configuration. Repository locations and password material stay outside

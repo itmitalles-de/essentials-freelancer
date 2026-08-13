@@ -2,8 +2,8 @@
 # Export consistent business data and upload it to an encrypted restic repository.
 set -Eeuo pipefail
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+PROJECT_DIR=$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)
 CONFIG_FILE=${FREELANCER_BACKUP_CONFIG:-/etc/freelancer-backup.env}
 
 die() {
@@ -35,7 +35,8 @@ if [ -n "${RCLONE_CONFIG:-}" ]; then
   export RCLONE_CONFIG
 fi
 
-"$SCRIPT_DIR/export-business-data.sh" "$LOCAL_EXPORT_ROOT"
+FREELANCER_REQUIRED_MODULES='export.business_data backup.offsite' \
+  "$SCRIPT_DIR/export-business-data.sh" "$LOCAL_EXPORT_ROOT"
 latest_export=$(find "$LOCAL_EXPORT_ROOT" -mindepth 1 -maxdepth 1 -type d \
   -name '20??????T??????Z' -printf '%f\t%p\n' | sort | tail -n 1 | cut -f 2-)
 [ -n "$latest_export" ] || die 'no completed export was found'

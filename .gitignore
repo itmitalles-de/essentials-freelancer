@@ -10,6 +10,8 @@ __pycache__/
 node_modules/
 frontend/dist/
 frontend/tsconfig.tsbuildinfo
+frontend/test-results/
+frontend/playwright-report/
 
 # Local business-data exports (contain production data when run on a live host)
 backups/

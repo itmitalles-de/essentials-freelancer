@@ -15,6 +15,7 @@ def test_openapi_contract_contains_protected_product_boundaries(client: TestClie
         "/api/reports/summary": {"get"},
         "/api/reports/time.csv": {"get"},
         "/api/ready": {"get"},
+        "/api/meta": {"get"},
     }
     for path, methods in expected_operations.items():
         assert path in schema["paths"]

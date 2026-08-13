@@ -4,8 +4,10 @@ import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 
+import bcrypt
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import event
 
 TEST_ROOT = Path(tempfile.mkdtemp(prefix="freelancer-tests-"))
 os.environ.update(
@@ -22,8 +24,27 @@ os.environ.update(
 )
 
 from app.database import Base, SessionLocal, engine  # noqa: E402
+import app.main as main_module  # noqa: E402
 from app.main import app, seed_admin  # noqa: E402
 from app.rate_limit import limiter  # noqa: E402
+
+
+def _fast_test_hash(password: str) -> str:
+    """Exercise bcrypt semantics without paying production work factor per test."""
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=4)).decode()
+
+
+main_module.hash_password = _fast_test_hash
+
+
+@event.listens_for(engine, "connect")
+def _configure_test_sqlite(dbapi_connection, _connection_record) -> None:
+    """Avoid durable fsync overhead for the disposable synthetic test database."""
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=MEMORY")
+    cursor.execute("PRAGMA synchronous=OFF")
+    cursor.execute("PRAGMA temp_store=MEMORY")
+    cursor.close()
 
 
 @pytest.fixture(autouse=True)

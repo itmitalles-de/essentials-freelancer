@@ -54,8 +54,8 @@ export function AdminModules() {
       {GROUPS.map((group) => {
         const groupModules = modules.filter((item) => item.manifest.group === group);
         return (
-          <section key={group} className="stack" aria-labelledby={`module-group-${group}`}>
-            <h3 id={`module-group-${group}`}>{group}</h3>
+          <section key={group} className="stack" aria-labelledby={`module-group-${GROUPS.indexOf(group)}`}>
+            <h3 id={`module-group-${GROUPS.indexOf(group)}`}>{group}</h3>
             {groupModules.length === 0 ? (
               <p className="muted">Keine Module in dieser Gruppe.</p>
             ) : (

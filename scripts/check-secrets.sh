@@ -2,7 +2,7 @@
 # Conservative static scan. Prints file names only, never matching content.
 set -Eeuo pipefail
 
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$ROOT"
 
 fail() {
