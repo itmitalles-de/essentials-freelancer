@@ -9,6 +9,8 @@ import { Invoices } from "./pages/Invoices";
 import { InvoiceDetail } from "./pages/InvoiceDetail";
 import { Expenses } from "./pages/Expenses";
 import { Settings } from "./pages/Settings";
+import { Projects } from "./pages/Projects";
+import { Quotes } from "./pages/Quotes";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, loading } = useAuth();
@@ -31,7 +33,9 @@ export default function App() {
       >
         <Route index element={<Dashboard />} />
         <Route path="clients" element={<Clients />} />
+        <Route path="projects" element={<Projects />} />
         <Route path="time" element={<TimeTracking />} />
+        <Route path="quotes" element={<Quotes />} />
         <Route path="invoices" element={<Invoices />} />
         <Route path="invoices/:id" element={<InvoiceDetail />} />
         <Route path="expenses" element={<Expenses />} />

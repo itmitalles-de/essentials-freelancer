@@ -1,9 +1,12 @@
 import os
+import uuid
 from decimal import Decimal
+from xml.sax.saxutils import escape
 
 from PIL import Image as PILImage
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import (
     Image,
@@ -13,17 +16,30 @@ from reportlab.platypus import (
     Table,
     TableStyle,
 )
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 
 from app.config import settings
-from app.models import CompanySettings, Client, Invoice
+from app.models import CompanySettings, Client, Invoice, Quote
 
 LOGO_MAX_WIDTH = 45 * mm
 LOGO_MAX_HEIGHT = 25 * mm
+UNIT_LABELS = {
+    "hours": "Std.",
+    "days": "Tage",
+    "items": "Stück",
+    "flat": "pauschal",
+}
 
 
 def _eur(value: Decimal) -> str:
     return f"{value:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _safe_text(value: object) -> str:
+    return escape(str(value)).replace("\n", "<br/>")
+
+
+def _paragraph(value: object, style: ParagraphStyle) -> Paragraph:
+    return Paragraph(_safe_text(value), style)
 
 
 def _logo_flowable(logo_path: str | None) -> Image | None:
@@ -35,14 +51,20 @@ def _logo_flowable(logo_path: str | None) -> Image | None:
     return Image(logo_path, width=width * scale, height=height * scale)
 
 
-def generate_invoice_pdf(
-    invoice: Invoice, client: Client, company: CompanySettings
+def _generate_document(
+    *,
+    file_path: str,
+    title: str,
+    date_rows: list[tuple[str, str]],
+    line_items: list,
+    total: Decimal,
+    notes: str,
+    client: Client,
+    company: CompanySettings,
+    include_payment_details: bool,
 ) -> str:
     os.makedirs(settings.pdf_storage_dir, exist_ok=True)
-    file_path = os.path.join(
-        settings.pdf_storage_dir, f"{invoice.invoice_number}.pdf"
-    )
-
+    temporary_path = f"{file_path}.{uuid.uuid4().hex}.tmp"
     styles = getSampleStyleSheet()
     small = ParagraphStyle("small", parent=styles["Normal"], fontSize=9, leading=12)
     header_style = ParagraphStyle(
@@ -50,30 +72,22 @@ def generate_invoice_pdf(
     )
 
     doc = SimpleDocTemplate(
-        file_path,
+        temporary_path,
         pagesize=A4,
         topMargin=20 * mm,
         bottomMargin=20 * mm,
         leftMargin=20 * mm,
         rightMargin=20 * mm,
     )
-
     story = []
 
     sender_line = " · ".join(
-        filter(
-            None,
-            [
-                company.company_name,
-                company.address_line1,
-                company.zip_city,
-            ],
-        )
+        filter(None, [company.company_name, company.address_line1, company.zip_city])
     )
     logo = _logo_flowable(company.logo_path)
     if logo is not None:
         header_table = Table(
-            [[Paragraph(sender_line, small), logo]],
+            [[_paragraph(sender_line, small), logo]],
             colWidths=[125 * mm, LOGO_MAX_WIDTH],
         )
         header_table.setStyle(
@@ -88,31 +102,27 @@ def generate_invoice_pdf(
         )
         story.append(header_table)
     else:
-        story.append(Paragraph(sender_line, small))
+        story.append(_paragraph(sender_line, small))
     story.append(Spacer(1, 10 * mm))
 
     client_lines = [client.name]
-    if client.contact_person:
-        client_lines.append(client.contact_person)
-    if client.address_line1:
-        client_lines.append(client.address_line1)
-    if client.address_line2:
-        client_lines.append(client.address_line2)
-    if client.zip_city:
-        client_lines.append(client.zip_city)
-    story.append(Paragraph("<br/>".join(client_lines), styles["Normal"]))
+    client_lines.extend(
+        value
+        for value in (
+            client.contact_person,
+            client.address_line1,
+            client.address_line2,
+            client.zip_city,
+        )
+        if value
+    )
+    story.append(_paragraph("\n".join(client_lines), styles["Normal"]))
     story.append(Spacer(1, 12 * mm))
 
-    story.append(Paragraph(f"Rechnung {invoice.invoice_number}", header_style))
+    story.append(_paragraph(title, header_style))
     story.append(Spacer(1, 4 * mm))
 
-    meta_table = Table(
-        [
-            ["Rechnungsdatum:", invoice.issue_date.strftime("%d.%m.%Y")],
-            ["Fällig am:", invoice.due_date.strftime("%d.%m.%Y")],
-        ],
-        colWidths=[40 * mm, 60 * mm],
-    )
+    meta_table = Table(date_rows, colWidths=[40 * mm, 60 * mm])
     meta_table.setStyle(
         TableStyle(
             [
@@ -125,19 +135,20 @@ def generate_invoice_pdf(
     story.append(meta_table)
     story.append(Spacer(1, 8 * mm))
 
-    table_data = [["Beschreibung", "Menge (Std.)", "Preis/Std.", "Betrag"]]
-    for item in invoice.line_items:
+    table_data = [["Beschreibung", "Menge", "Einheit", "Einzelpreis", "Betrag"]]
+    for item in line_items:
         table_data.append(
             [
-                Paragraph(item.description, small),
+                _paragraph(item.description, small),
                 f"{Decimal(item.quantity):.2f}",
+                UNIT_LABELS.get(item.unit, item.unit),
                 _eur(Decimal(item.unit_price)),
                 _eur(Decimal(item.amount)),
             ]
         )
 
     items_table = Table(
-        table_data, colWidths=[85 * mm, 30 * mm, 30 * mm, 30 * mm]
+        table_data, colWidths=[68 * mm, 22 * mm, 22 * mm, 31 * mm, 32 * mm]
     )
     items_table.setStyle(
         TableStyle(
@@ -157,8 +168,7 @@ def generate_invoice_pdf(
     story.append(Spacer(1, 4 * mm))
 
     total_table = Table(
-        [["Gesamtbetrag", _eur(Decimal(invoice.total))]],
-        colWidths=[145 * mm, 30 * mm],
+        [["Gesamtbetrag", _eur(total)]], colWidths=[143 * mm, 32 * mm]
     )
     total_table.setStyle(
         TableStyle(
@@ -174,25 +184,81 @@ def generate_invoice_pdf(
     story.append(total_table)
     story.append(Spacer(1, 10 * mm))
 
-    if invoice.notes:
-        story.append(Paragraph(invoice.notes, small))
+    if notes:
+        story.append(_paragraph(notes, small))
         story.append(Spacer(1, 6 * mm))
-
     if company.invoice_footer_note:
-        story.append(Paragraph(company.invoice_footer_note, small))
+        story.append(_paragraph(company.invoice_footer_note, small))
         story.append(Spacer(1, 6 * mm))
 
-    payment_lines = []
-    if company.iban:
-        payment_lines.append(f"IBAN: {company.iban}")
-    if company.bic:
-        payment_lines.append(f"BIC: {company.bic}")
-    if company.bank_name:
-        payment_lines.append(f"Bank: {company.bank_name}")
-    if company.tax_id:
-        payment_lines.append(f"Steuernummer: {company.tax_id}")
-    if payment_lines:
-        story.append(Paragraph("<br/>".join(payment_lines), small))
+    if include_payment_details:
+        payment_lines = []
+        if company.iban:
+            payment_lines.append(f"IBAN: {company.iban}")
+        if company.bic:
+            payment_lines.append(f"BIC: {company.bic}")
+        if company.bank_name:
+            payment_lines.append(f"Bank: {company.bank_name}")
+        if company.tax_id:
+            payment_lines.append(f"Steuernummer: {company.tax_id}")
+        if payment_lines:
+            story.append(_paragraph("\n".join(payment_lines), small))
 
-    doc.build(story)
+    try:
+        doc.build(story)
+        with open(temporary_path, "rb") as generated:
+            os.fsync(generated.fileno())
+        os.replace(temporary_path, file_path)
+    except Exception:
+        try:
+            os.remove(temporary_path)
+        except FileNotFoundError:
+            pass
+        raise
     return file_path
+
+
+def generate_invoice_pdf(
+    invoice: Invoice, client: Client, company: CompanySettings
+) -> str:
+    file_path = os.path.join(settings.pdf_storage_dir, f"{invoice.invoice_number}.pdf")
+    return _generate_document(
+        file_path=file_path,
+        title=f"Rechnung {invoice.invoice_number}",
+        date_rows=[
+            ("Rechnungsdatum:", invoice.issue_date.strftime("%d.%m.%Y")),
+            ("Fällig am:", invoice.due_date.strftime("%d.%m.%Y")),
+        ],
+        line_items=invoice.line_items,
+        total=Decimal(invoice.total),
+        notes=invoice.notes,
+        client=client,
+        company=company,
+        include_payment_details=True,
+    )
+
+
+def generate_quote_pdf(
+    quote: Quote,
+    client: Client,
+    company: CompanySettings,
+    file_path: str | None = None,
+) -> str:
+    if file_path is None:
+        file_path = os.path.join(
+            settings.pdf_storage_dir, f"quote-{quote.quote_number}.pdf"
+        )
+    return _generate_document(
+        file_path=file_path,
+        title=f"Angebot {quote.quote_number}",
+        date_rows=[
+            ("Angebotsdatum:", quote.issue_date.strftime("%d.%m.%Y")),
+            ("Gültig bis:", quote.valid_until.strftime("%d.%m.%Y")),
+        ],
+        line_items=quote.line_items,
+        total=Decimal(quote.total),
+        notes=quote.notes,
+        client=client,
+        company=company,
+        include_payment_details=False,
+    )

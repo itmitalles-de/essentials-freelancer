@@ -26,7 +26,9 @@ export function Layout() {
         </div>
         <NavItem to="/">{t("nav.dashboard")}</NavItem>
         <NavItem to="/clients">{t("nav.clients")}</NavItem>
+        <NavItem to="/projects">{t("nav.projects")}</NavItem>
         <NavItem to="/time">{t("nav.time")}</NavItem>
+        <NavItem to="/quotes">{t("nav.quotes")}</NavItem>
         <NavItem to="/invoices">{t("nav.invoices")}</NavItem>
         <NavItem to="/expenses">{t("nav.expenses")}</NavItem>
         <NavItem to="/settings">{t("nav.settings")}</NavItem>

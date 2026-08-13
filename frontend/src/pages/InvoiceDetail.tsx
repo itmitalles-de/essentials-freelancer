@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, openInvoicePdf, ApiError } from "../api";
 import { useLanguage } from "../contexts/LanguageContext";
-import { Client, Invoice } from "../types";
+import { Client, Invoice, Project } from "../types";
 
 export function InvoiceDetail() {
   const { t } = useLanguage();
@@ -10,6 +10,7 @@ export function InvoiceDetail() {
   const navigate = useNavigate();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [client, setClient] = useState<Client | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -22,9 +23,11 @@ export function InvoiceDetail() {
 
   useEffect(() => {
     load();
+    api.get<Project[]>("/projects").then(setProjects);
   }, [id]);
 
   if (!invoice) return <div>{t("invoiceDetail.loading")}</div>;
+  const projectName = (projectId: number | null) => projects.find((project) => project.id === projectId)?.name ?? "—";
 
   const send = async () => {
     setBusy(true);
@@ -66,7 +69,9 @@ export function InvoiceDetail() {
           <tr>
             <th>{t("invoiceDetail.colDescription")}</th>
             <th>{t("invoiceDetail.colHours")}</th>
+            <th>{t("invoiceDetail.colUnit")}</th>
             <th>{t("invoiceDetail.colPricePerHour")}</th>
+            <th>{t("invoiceDetail.colProject")}</th>
             <th>{t("invoiceDetail.colAmount")}</th>
           </tr>
         </thead>
@@ -75,7 +80,9 @@ export function InvoiceDetail() {
             <tr key={li.id}>
               <td>{li.description}</td>
               <td>{li.quantity}</td>
+              <td>{li.unit}</td>
               <td>{li.unit_price} €</td>
+              <td>{projectName(li.project_id)}</td>
               <td>{li.amount} €</td>
             </tr>
           ))}

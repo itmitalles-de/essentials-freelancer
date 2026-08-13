@@ -37,7 +37,7 @@ export function Settings() {
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const { next_invoice_number, has_logo, ...payload } = settings;
+    const { next_invoice_number, next_quote_number, has_logo, ...payload } = settings;
     const updated = await api.put<CompanySettings>("/settings", payload);
     setSettings(updated);
     setSaved(true);
@@ -101,6 +101,7 @@ export function Settings() {
         <input placeholder={t("settings.bankName")} value={settings.bank_name} onChange={set("bank_name")} />
         <textarea placeholder={t("settings.footerNote")} value={settings.invoice_footer_note} onChange={set("invoice_footer_note")} />
         <input placeholder={t("settings.invoiceNumberPrefix")} value={settings.invoice_number_prefix} onChange={set("invoice_number_prefix")} />
+        <input placeholder={t("settings.quoteNumberPrefix")} value={settings.quote_number_prefix} onChange={set("quote_number_prefix")} />
         <input placeholder={t("settings.defaultHourlyRate")} value={settings.default_hourly_rate} onChange={set("default_hourly_rate")} />
         <input
           placeholder={t("settings.paymentTerms")}
@@ -110,6 +111,9 @@ export function Settings() {
         />
         <div style={{ color: "var(--fg-muted)", fontSize: "0.85rem" }}>
           {t("settings.nextInvoiceNumber")} {settings.invoice_number_prefix}-{new Date().getFullYear()}-{String(settings.next_invoice_number).padStart(4, "0")}
+        </div>
+        <div style={{ color: "var(--fg-muted)", fontSize: "0.85rem" }}>
+          {t("settings.nextQuoteNumber")} {settings.quote_number_prefix}-{new Date().getFullYear()}-{String(settings.next_quote_number).padStart(4, "0")}
         </div>
         <button type="submit">{t("settings.save")}</button>
         {saved && <div style={{ color: "var(--success)" }}>{t("settings.saved")}</div>}

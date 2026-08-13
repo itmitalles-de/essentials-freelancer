@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api, ApiError } from "../api";
 import { useLanguage } from "../contexts/LanguageContext";
-import { Client, TimeEntry } from "../types";
+import { Client, Project, TimeEntry } from "../types";
 
 function formatDuration(minutes: number) {
   const h = Math.floor(minutes / 60);
@@ -12,22 +12,26 @@ function formatDuration(minutes: number) {
 export function TimeTracking() {
   const { t } = useLanguage();
   const [clients, setClients] = useState<Client[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [running, setRunning] = useState<TimeEntry | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [timerClientId, setTimerClientId] = useState<number | "">("");
+  const [timerProjectId, setTimerProjectId] = useState<number | "">("");
   const [timerDescription, setTimerDescription] = useState("");
   const [filterClientId, setFilterClientId] = useState<number | "">("");
   const [error, setError] = useState<string | null>(null);
 
   const [manual, setManual] = useState({
     client_id: "",
+    project_id: "",
     date: new Date().toISOString().slice(0, 10),
     description: "",
     hours: "",
   });
 
   const loadClients = () => api.get<Client[]>("/clients").then(setClients);
+  const loadProjects = () => api.get<Project[]>("/projects").then(setProjects);
   const loadEntries = () =>
     api
       .get<TimeEntry[]>(`/time-entries${filterClientId ? `?client_id=${filterClientId}` : ""}`)
@@ -36,6 +40,7 @@ export function TimeTracking() {
 
   useEffect(() => {
     loadClients();
+    loadProjects();
     loadRunning();
   }, []);
 
@@ -60,6 +65,7 @@ export function TimeTracking() {
     try {
       const entry = await api.post<TimeEntry>("/time-entries/start", {
         client_id: timerClientId,
+        project_id: timerProjectId || null,
         description: timerDescription,
       });
       setRunning(entry);
@@ -87,6 +93,7 @@ export function TimeTracking() {
     try {
       await api.post("/time-entries", {
         client_id: Number(manual.client_id),
+        project_id: manual.project_id ? Number(manual.project_id) : null,
         date: manual.date,
         description: manual.description,
         duration_minutes: Math.round(Number(manual.hours) * 60),
@@ -110,6 +117,7 @@ export function TimeTracking() {
   };
 
   const clientName = (id: number) => clients.find((c) => c.id === id)?.name ?? "?";
+  const projectName = (id: number | null) => projects.find((project) => project.id === id)?.name ?? "—";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
@@ -129,10 +137,16 @@ export function TimeTracking() {
           </>
         ) : (
           <>
-            <select value={timerClientId} onChange={(e) => setTimerClientId(Number(e.target.value))}>
+            <select value={timerClientId} onChange={(e) => { setTimerClientId(e.target.value ? Number(e.target.value) : ""); setTimerProjectId(""); }}>
               <option value="">{t("time.chooseClient")}</option>
               {clients.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <select value={timerProjectId} onChange={(e) => setTimerProjectId(e.target.value ? Number(e.target.value) : "")}>
+              <option value="">{t("time.project")}</option>
+              {projects.filter((project) => project.active && project.client_id === timerClientId).map((project) => (
+                <option key={project.id} value={project.id}>{project.name}</option>
               ))}
             </select>
             <input
@@ -148,10 +162,16 @@ export function TimeTracking() {
 
       <form onSubmit={onManualSubmit} className="card" style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
         <strong>{t("time.manualEntry")}</strong>
-        <select required value={manual.client_id} onChange={(e) => setManual({ ...manual, client_id: e.target.value })}>
+        <select required value={manual.client_id} onChange={(e) => setManual({ ...manual, client_id: e.target.value, project_id: "" })}>
           <option value="">{t("time.client")}</option>
           {clients.map((c) => (
             <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        <select value={manual.project_id} onChange={(e) => setManual({ ...manual, project_id: e.target.value })}>
+          <option value="">{t("time.project")}</option>
+          {projects.filter((project) => project.active && String(project.client_id) === manual.client_id).map((project) => (
+            <option key={project.id} value={project.id}>{project.name}</option>
           ))}
         </select>
         <input type="date" value={manual.date} onChange={(e) => setManual({ ...manual, date: e.target.value })} />
@@ -183,6 +203,7 @@ export function TimeTracking() {
           <tr>
             <th>{t("time.colDate")}</th>
             <th>{t("time.colClient")}</th>
+            <th>{t("time.colProject")}</th>
             <th>{t("time.colDescription")}</th>
             <th>{t("time.colDuration")}</th>
             <th>{t("time.colRate")}</th>
@@ -195,6 +216,7 @@ export function TimeTracking() {
             <tr key={e.id}>
               <td>{e.date}</td>
               <td>{clientName(e.client_id)}</td>
+              <td>{projectName(e.project_id)}</td>
               <td>{e.description}</td>
               <td>{formatDuration(e.duration_minutes)}</td>
               <td>{e.hourly_rate} €/h</td>
