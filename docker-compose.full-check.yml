@@ -1,4 +1,16 @@
 services:
+  db:
+    environment:
+      # Test-only: the volumes are disposable and durability across a host crash
+      # is outside this functional export/restore rehearsal.
+      POSTGRES_INITDB_ARGS: "--no-sync"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tracker"]
+      interval: 2s
+      timeout: 5s
+      retries: 90
+      start_period: 120s
+
   backend:
     environment:
       SMTP_HOST: smtp-fixture
@@ -10,6 +22,12 @@ services:
     depends_on:
       smtp-fixture:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 2s
+      timeout: 5s
+      retries: 90
+      start_period: 120s
 
   smtp-fixture:
     build: ./tests/full-check/smtp-fixture
