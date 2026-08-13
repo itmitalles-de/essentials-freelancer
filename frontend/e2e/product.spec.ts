@@ -17,11 +17,19 @@ async function login(page: import("@playwright/test").Page) {
 async function expectNoSeriousAccessibilityViolations(
   page: import("@playwright/test").Page
 ) {
-  const result = await new AxeBuilder({ page }).analyze();
-  const serious = result.violations.filter((item) =>
-    ["serious", "critical"].includes(item.impact ?? "")
-  );
-  expect(serious, JSON.stringify(serious, null, 2)).toEqual([]);
+  for (const theme of ["light", "dark"] as const) {
+    await page.evaluate((selectedTheme) => {
+      document.documentElement.dataset.theme = selectedTheme;
+    }, theme);
+    const result = await new AxeBuilder({ page }).analyze();
+    const serious = result.violations.filter((item) =>
+      ["serious", "critical"].includes(item.impact ?? "")
+    );
+    expect(
+      serious,
+      `${theme} theme:\n${JSON.stringify(serious, null, 2)}`
+    ).toEqual([]);
+  }
 }
 
 test("normal navigation follows module state and core data is visible", async ({ page }) => {

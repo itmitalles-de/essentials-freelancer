@@ -6,7 +6,8 @@
   --border: #d8dbe0;
   --accent: #2f6fed;
   --accent-fg: #ffffff;
-  --danger: #d64545;
+  --danger: #c73737;
+  --danger-fg: #ffffff;
   --success: #2f9e5c;
   --warning: #c98a1f;
   --shadow: rgba(0, 0, 0, 0.08);
@@ -22,6 +23,7 @@
     --accent: #5b8dff;
     --accent-fg: #0c1220;
     --danger: #ef6a6a;
+    --danger-fg: #1a0909;
     --success: #4cc783;
     --warning: #e0a83f;
     --shadow: rgba(0, 0, 0, 0.4);
@@ -37,6 +39,7 @@
   --accent: #5b8dff;
   --accent-fg: #0c1220;
   --danger: #ef6a6a;
+  --danger-fg: #1a0909;
   --success: #4cc783;
   --warning: #e0a83f;
   --shadow: rgba(0, 0, 0, 0.4);
@@ -317,7 +320,7 @@ button.secondary {
 
 button.danger {
   background: var(--danger);
-  color: #fff;
+  color: var(--danger-fg);
 }
 
 button:disabled {
@@ -363,4 +366,4 @@ th {
 .badge.draft { background: var(--border); color: var(--fg); }
 .badge.sent { background: var(--warning); color: #1a1200; }
 .badge.paid { background: var(--success); color: #06210f; }
-.badge.cancelled { background: var(--danger); color: #fff; }
+.badge.cancelled { background: var(--danger); color: var(--danger-fg); }
