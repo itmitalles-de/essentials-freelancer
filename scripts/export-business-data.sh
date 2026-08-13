@@ -2,8 +2,8 @@
 # Export PostgreSQL plus all generated PDFs, logos, and expense receipts.
 set -Eeuo pipefail
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+PROJECT_DIR=$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)
 ENV_FILE=${FREELANCER_ENV_FILE:-"$PROJECT_DIR/.env"}
 EXPORT_ROOT=${1:-"$PROJECT_DIR/backups"}
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
@@ -12,6 +12,8 @@ WORK_DIR=
 BACKEND_WAS_RUNNING=false
 DB_WAS_RUNNING=false
 DB_STARTED=false
+REQUIRED_MODULES=${FREELANCER_REQUIRED_MODULES:-export.business_data}
+DATABASE_READY_TIMEOUT_SECONDS=${DATABASE_READY_TIMEOUT_SECONDS:-180}
 
 die() {
   printf 'export: %s\n' "$*" >&2
@@ -69,18 +71,38 @@ fi
 
 db_container=$(compose ps -q db)
 [ -n "$db_container" ] || die 'database container is unavailable'
-for attempt in $(seq 1 30); do
+database_deadline=$((SECONDS + DATABASE_READY_TIMEOUT_SECONDS))
+while [ "$SECONDS" -lt "$database_deadline" ]; do
   if [ "$(docker inspect --format '{{.State.Health.Status}}' "$db_container")" = healthy ]; then
     break
   fi
-  [ "$attempt" -lt 30 ] || die 'database did not become healthy'
   sleep 2
 done
+[ "$(docker inspect --format '{{.State.Health.Status}}' "$db_container")" = healthy ] || \
+  die "database did not become healthy within ${DATABASE_READY_TIMEOUT_SECONDS}s"
+
+# Pre-module databases remain exportable for migration safety. Once the module
+# table exists, an administrator's deactivation also stops host-side jobs.
+module_table=$(compose exec -T db psql -U tracker -d tracker -Atc \
+  "SELECT to_regclass('public.module_installations')" | tr -d '\r')
+if [ -n "$module_table" ]; then
+  for module_id in $REQUIRED_MODULES; do
+    case "$module_id" in
+      ''|*[!a-z0-9._-]*) die "invalid required module id: $module_id" ;;
+    esac
+    module_state=$(compose exec -T db psql -U tracker -d tracker -Atc \
+      "SELECT state FROM module_installations WHERE module_id = '$module_id'" | tr -d '\r')
+    [ "$module_state" = enabled ] || \
+      die "required module $module_id is not enabled (state: ${module_state:-missing})"
+  done
+fi
 
 if [ "$BACKEND_WAS_RUNNING" = true ]; then
   compose stop --timeout 30 backend >/dev/null
 fi
 
+# The variables below intentionally expand inside the database container.
+# shellcheck disable=SC2016
 compose exec -T db sh -ec \
   'exec pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom --no-owner --no-privileges' \
   >"$WORK_DIR/business.pg.dump"

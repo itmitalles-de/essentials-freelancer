@@ -2,14 +2,15 @@ import os
 from datetime import date, timedelta
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.config import settings as app_settings
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_module
 from app.email_utils import EmailNotConfigured, send_invoice_email
+from app.idempotency import request_fingerprint
 from app.models import (
     Client,
     CompanySettings,
@@ -21,11 +22,17 @@ from app.models import (
     TimeEntry,
     User,
 )
+from app.money import money
 from app.pdf import generate_invoice_pdf
+from app.rate_limit import enforce_smtp_rate_limit
 from app.schemas import InvoiceCreate, InvoiceOut, InvoiceStatusUpdate
 from app.time_utils import utc_now_naive
 
-router = APIRouter(prefix="/api/invoices", tags=["invoices"])
+router = APIRouter(
+    prefix="/api/invoices",
+    tags=["invoices"],
+    dependencies=[Depends(require_module("billing.invoices"))],
+)
 
 
 def _get_or_create_settings(
@@ -44,14 +51,27 @@ def _get_or_create_settings(
 
 @router.get("", response_model=list[InvoiceOut])
 def list_invoices(
+    response: Response,
     client_id: int | None = None,
+    status_filter: InvoiceStatus | None = Query(default=None, alias="status"),
+    date_from: date | None = None,
+    date_to: date | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     query = db.query(Invoice)
     if client_id is not None:
         query = query.filter(Invoice.client_id == client_id)
-    return query.order_by(Invoice.id.desc()).all()
+    if status_filter is not None:
+        query = query.filter(Invoice.status == status_filter)
+    if date_from is not None:
+        query = query.filter(Invoice.issue_date >= date_from)
+    if date_to is not None:
+        query = query.filter(Invoice.issue_date <= date_to)
+    response.headers["X-Total-Count"] = str(query.count())
+    return query.order_by(Invoice.id.desc()).offset(offset).limit(limit).all()
 
 
 @router.get("/{invoice_id}", response_model=InvoiceOut)
@@ -69,9 +89,25 @@ def get_invoice(
 @router.post("", response_model=InvoiceOut)
 def create_invoice(
     payload: InvoiceCreate,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    fingerprint = request_fingerprint(payload.model_dump(mode="json"))
+    if idempotency_key is not None:
+        idempotency_key = idempotency_key.strip()
+        if not idempotency_key or len(idempotency_key) > 128:
+            raise HTTPException(status_code=400, detail="Ungültiger Idempotency-Key")
+        existing = (
+            db.query(Invoice).filter(Invoice.request_key == idempotency_key).first()
+        )
+        if existing is not None:
+            if existing.request_fingerprint != fingerprint:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Idempotency-Key wurde bereits für andere Eingabedaten verwendet",
+                )
+            return existing
     client = db.get(Client, payload.client_id)
     if client is None:
         raise HTTPException(status_code=404, detail="Kunde nicht gefunden")
@@ -84,6 +120,17 @@ def create_invoice(
         .with_for_update()
         .all()
     )
+    if idempotency_key is not None:
+        existing = (
+            db.query(Invoice).filter(Invoice.request_key == idempotency_key).first()
+        )
+        if existing is not None:
+            if existing.request_fingerprint != fingerprint:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Idempotency-Key wurde bereits für andere Eingabedaten verwendet",
+                )
+            return existing
     if len(entries) != len(payload.time_entry_ids):
         raise HTTPException(status_code=404, detail="Ein Zeiteintrag wurde nicht gefunden")
     for entry in entries:
@@ -118,7 +165,11 @@ def create_invoice(
         due_date=today + timedelta(days=due_days),
         status=InvoiceStatus.draft,
         notes=payload.notes,
+        subtotal=Decimal("0"),
+        tax_total=Decimal("0"),
         total=Decimal("0"),
+        request_key=idempotency_key,
+        request_fingerprint=fingerprint if idempotency_key else None,
     )
     db.add(invoice)
     db.flush()
@@ -135,6 +186,9 @@ def create_invoice(
             quantity=hours.quantize(Decimal("0.01")),
             unit="hours",
             unit_price=rate,
+            net_amount=amount,
+            tax_rate=Decimal("0"),
+            tax_amount=Decimal("0"),
             amount=amount,
             project_id=entry.project_id,
         )
@@ -143,7 +197,9 @@ def create_invoice(
         entry.billed = True
         entry.invoice_id = invoice.id
 
-    invoice.total = total
+    invoice.subtotal = money(total)
+    invoice.tax_total = Decimal("0.00")
+    invoice.total = money(total)
     company.next_invoice_number += 1
     db.flush()
     db.refresh(invoice)
@@ -183,7 +239,12 @@ def download_invoice_pdf(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    invoice = db.get(Invoice, invoice_id)
+    invoice = (
+        db.query(Invoice)
+        .filter(Invoice.id == invoice_id)
+        .with_for_update()
+        .one_or_none()
+    )
     if (
         invoice is None
         or not invoice.pdf_path
@@ -197,17 +258,34 @@ def download_invoice_pdf(
     )
 
 
-@router.post("/{invoice_id}/send", response_model=InvoiceOut)
+@router.post(
+    "/{invoice_id}/send",
+    response_model=InvoiceOut,
+    dependencies=[
+        Depends(require_module("communication.smtp")),
+        Depends(enforce_smtp_rate_limit),
+    ],
+)
 def send_invoice(
     invoice_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    invoice = db.get(Invoice, invoice_id)
+    invoice = (
+        db.query(Invoice)
+        .filter(Invoice.id == invoice_id)
+        .with_for_update()
+        .one_or_none()
+    )
     if invoice is None:
         raise HTTPException(status_code=404, detail="Rechnung nicht gefunden")
     if not invoice.pdf_path:
         raise HTTPException(status_code=400, detail="Kein PDF vorhanden")
+    if invoice.status not in {InvoiceStatus.draft, InvoiceStatus.sent}:
+        raise HTTPException(
+            status_code=400,
+            detail="Nur Entwürfe und bereits versendete Rechnungen können gesendet werden",
+        )
     client = db.get(Client, invoice.client_id)
     if not client.email:
         raise HTTPException(status_code=400, detail="Kunde hat keine E-Mail-Adresse hinterlegt")

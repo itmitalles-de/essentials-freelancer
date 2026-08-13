@@ -11,11 +11,21 @@ import { Expenses } from "./pages/Expenses";
 import { Settings } from "./pages/Settings";
 import { Projects } from "./pages/Projects";
 import { Quotes } from "./pages/Quotes";
+import { AdminModules } from "./pages/AdminModules";
+import { QuoteAssistant } from "./pages/QuoteAssistant";
+import { ModulesProvider, useModules } from "./contexts/ModulesContext";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, loading } = useAuth();
   if (loading) return null;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
+function ModuleGate({ moduleId, children }: { moduleId: string; children: React.ReactNode }) {
+  const { loading, isEnabled } = useModules();
+  if (loading) return null;
+  if (!isEnabled(moduleId)) return <Navigate to="/admin/modules" replace />;
   return <>{children}</>;
 }
 
@@ -27,19 +37,23 @@ export default function App() {
         path="/"
         element={
           <RequireAuth>
-            <Layout />
+            <ModulesProvider>
+              <Layout />
+            </ModulesProvider>
           </RequireAuth>
         }
       >
-        <Route index element={<Dashboard />} />
-        <Route path="clients" element={<Clients />} />
-        <Route path="projects" element={<Projects />} />
-        <Route path="time" element={<TimeTracking />} />
-        <Route path="quotes" element={<Quotes />} />
-        <Route path="invoices" element={<Invoices />} />
-        <Route path="invoices/:id" element={<InvoiceDetail />} />
-        <Route path="expenses" element={<Expenses />} />
-        <Route path="settings" element={<Settings />} />
+        <Route index element={<ModuleGate moduleId="core.reporting"><Dashboard /></ModuleGate>} />
+        <Route path="clients" element={<ModuleGate moduleId="core.clients"><Clients /></ModuleGate>} />
+        <Route path="projects" element={<ModuleGate moduleId="core.projects"><Projects /></ModuleGate>} />
+        <Route path="time" element={<ModuleGate moduleId="core.time_tracking"><TimeTracking /></ModuleGate>} />
+        <Route path="quotes" element={<ModuleGate moduleId="sales.quotes"><Quotes /></ModuleGate>} />
+        <Route path="quote-assistant" element={<ModuleGate moduleId="sales.quote_assistant"><QuoteAssistant /></ModuleGate>} />
+        <Route path="invoices" element={<ModuleGate moduleId="billing.invoices"><Invoices /></ModuleGate>} />
+        <Route path="invoices/:id" element={<ModuleGate moduleId="billing.invoices"><InvoiceDetail /></ModuleGate>} />
+        <Route path="expenses" element={<ModuleGate moduleId="expenses.receipts"><Expenses /></ModuleGate>} />
+        <Route path="settings" element={<ModuleGate moduleId="core.platform"><Settings /></ModuleGate>} />
+        <Route path="admin/modules" element={<AdminModules />} />
       </Route>
     </Routes>
   );

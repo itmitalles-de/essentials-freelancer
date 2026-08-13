@@ -19,6 +19,18 @@ class ApiError extends Error {
   }
 }
 
+function errorMessage(body: unknown, fallback: string): string {
+  if (!body || typeof body !== "object") return fallback;
+  const candidate = body as {
+    detail?: string | { message?: string };
+    error?: { message?: string };
+  };
+  if (typeof candidate.detail === "string") return candidate.detail;
+  if (candidate.detail?.message) return candidate.detail.message;
+  if (candidate.error?.message) return candidate.error.message;
+  return fallback;
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
@@ -42,7 +54,7 @@ async function request<T>(
     let detail = res.statusText;
     try {
       const body = await res.json();
-      detail = body.detail ?? detail;
+      detail = errorMessage(body, detail);
     } catch {
       /* ignore */
     }
@@ -78,6 +90,29 @@ async function openAuthenticatedPdf(path: string, fileName: string) {
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
+export async function downloadAuthenticated(path: string, fileName: string) {
+  const token = getToken();
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      detail = errorMessage(await res.json(), detail);
+    } catch {
+      /* response is not JSON */
+    }
+    throw new ApiError(res.status, detail);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
 export function openInvoicePdf(invoiceId: number, invoiceNumber: string) {
   return openAuthenticatedPdf(
     `/invoices/${invoiceId}/pdf`,
@@ -102,7 +137,7 @@ export async function uploadCompanyLogo<T>(file: File): Promise<T> {
     let detail = res.statusText;
     try {
       const body = await res.json();
-      detail = body.detail ?? detail;
+      detail = errorMessage(body, detail);
     } catch {
       /* ignore */
     }
@@ -135,7 +170,7 @@ export async function uploadExpenseReceipt<T>(expenseId: number, file: File): Pr
     let detail = res.statusText;
     try {
       const body = await res.json();
-      detail = body.detail ?? detail;
+      detail = errorMessage(body, detail);
     } catch {
       /* ignore */
     }

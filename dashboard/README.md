@@ -1,4 +1,4 @@
-# Freelancer Dashboard
+# Essentials+ Freelancer Dashboard
 
 Separates Homer-Dashboard nach dem Vorbild von `dashboard.mantle-climbing.de`.
 
@@ -34,4 +34,7 @@ Danach DNS für `dashboard.itmitalles.de` auf denselben öffentlichen Einstieg w
 - Konfigurationsänderungen benötigen keinen Container-Neustart; Browser neu laden genügt.
 - Keine Zugangsdaten oder Tokens in Homer ablegen: Die Konfiguration wird vollständig an den Browser ausgeliefert.
 
-Die bekannten Arbeitslinks zeigen derzeit auf `tracker.itmitalles.de`, entsprechend der bestehenden Projektdokumentation. Falls die App später auf `freelancer.itmitalles.de` umzieht, die vier Freelancer-URLs in `assets/config.yml` gemeinsam ändern.
+Die bekannten Arbeitslinks zeigen derzeit aus Kompatibilitätsgründen auf
+`tracker.itmitalles.de`. Die interne URL ist keine sichtbare Produktbezeichnung.
+Falls die App später auf eine andere Domain umzieht, alle Essentials+-URLs in
+`assets/config.yml` gemeinsam ändern und Proxy/DNS extern verifizieren.

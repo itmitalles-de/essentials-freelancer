@@ -2,11 +2,12 @@
 # Restore only into an empty database and empty documents volume.
 set -Eeuo pipefail
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+PROJECT_DIR=$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)
 ENV_FILE=${FREELANCER_ENV_FILE:-"$PROJECT_DIR/.env"}
 RESTORE_DIR=${1:-}
 CONFIRMATION=${2:-}
+DATABASE_READY_TIMEOUT_SECONDS=${DATABASE_READY_TIMEOUT_SECONDS:-180}
 
 die() {
   printf 'restore: %s\n' "$*" >&2
@@ -38,29 +39,37 @@ if [ -n "$(compose ps --status running -q backend)" ]; then
 fi
 compose up -d db >/dev/null
 db_container=$(compose ps -q db)
-for attempt in $(seq 1 30); do
+[ -n "$db_container" ] || die 'database container is unavailable'
+database_deadline=$((SECONDS + DATABASE_READY_TIMEOUT_SECONDS))
+while [ "$SECONDS" -lt "$database_deadline" ]; do
   if [ "$(docker inspect --format '{{.State.Health.Status}}' "$db_container")" = healthy ]; then
     break
   fi
-  [ "$attempt" -lt 30 ] || die 'database did not become healthy'
   sleep 2
 done
+[ "$(docker inspect --format '{{.State.Health.Status}}' "$db_container")" = healthy ] || \
+  die "database did not become healthy within ${DATABASE_READY_TIMEOUT_SECONDS}s"
 
+# These commands intentionally expand variables inside their containers.
+# shellcheck disable=SC2016
 table_count=$(compose exec -T db sh -ec \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema = '\''public'\''"')
 [ "$table_count" = 0 ] || die 'target database is not empty; restore refused'
 
+# shellcheck disable=SC2016
 if ! compose run --rm --no-deps -T --entrypoint sh backend -ec \
   'mkdir -p /data/invoices; test -z "$(find /data/invoices -mindepth 1 -print -quit)"'; then
   die 'target documents volume is not empty; restore refused'
 fi
 
+# shellcheck disable=SC2016
 compose exec -T db sh -ec \
   'exec pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-privileges' \
   <"$RESTORE_DIR/business.pg.dump"
 compose run --rm --no-deps -T --entrypoint tar backend \
   -xzf - -C /data <"$RESTORE_DIR/documents.tar.gz"
 
+# shellcheck disable=SC2016
 compose exec -T db sh -ec \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT version_num FROM alembic_version"' \
   >/dev/null

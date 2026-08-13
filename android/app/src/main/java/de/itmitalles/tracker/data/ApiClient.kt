@@ -19,7 +19,7 @@ object ApiClient {
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
 
     fun api(baseUrl: String, tokenProvider: () -> String?): TrackerApi {
-        val normalized = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+        val normalized = normalizeServerUrl(baseUrl)
         if (retrofit == null || currentBaseUrl != normalized) {
             currentBaseUrl = normalized
 

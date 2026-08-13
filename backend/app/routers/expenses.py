@@ -1,19 +1,24 @@
 import os
 import uuid
-from io import BytesIO
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile
 from fastapi.responses import FileResponse
-from PIL import Image, UnidentifiedImageError
 from sqlalchemy.orm import Session
 
 from app.config import settings as app_settings
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_module
 from app.models import Expense, User
 from app.schemas import ExpenseCreate, ExpenseOut
+from app.upload_validation import validate_image, validate_pdf
 
-router = APIRouter(prefix="/api/expenses", tags=["expenses"])
+router = APIRouter(
+    prefix="/api/expenses",
+    tags=["expenses"],
+    dependencies=[Depends(require_module("expenses.receipts"))],
+)
 
 ALLOWED_RECEIPT_TYPES = {
     "image/png": ".png",
@@ -25,21 +30,38 @@ MAX_RECEIPT_SIZE = 5 * 1024 * 1024
 
 def _validate_receipt_content(content: bytes, content_type: str) -> None:
     if content_type == "application/pdf":
-        if not content.startswith(b"%PDF-"):
-            raise HTTPException(status_code=400, detail="Der Beleg ist keine gültige PDF-Datei")
+        validate_pdf(content, "Der Beleg")
         return
-    try:
-        with Image.open(BytesIO(content)) as image:
-            image.verify()
-    except (UnidentifiedImageError, OSError):
-        raise HTTPException(status_code=400, detail="Der Beleg ist keine gültige Bilddatei")
+    validate_image(content, content_type, "Der Beleg")
 
 
 @router.get("", response_model=list[ExpenseOut])
 def list_expenses(
+    response: Response,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    category: str | None = None,
+    q: str | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
-    expenses = db.query(Expense).order_by(Expense.date.desc()).all()
+    query = db.query(Expense)
+    if date_from is not None:
+        query = query.filter(Expense.date >= date_from)
+    if date_to is not None:
+        query = query.filter(Expense.date <= date_to)
+    if category:
+        query = query.filter(Expense.category == category)
+    if q:
+        query = query.filter(Expense.description.ilike(f"%{q.strip()}%"))
+    response.headers["X-Total-Count"] = str(query.count())
+    expenses = (
+        query.order_by(Expense.date.desc(), Expense.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
     return [ExpenseOut.from_model(e) for e in expenses]
 
 
@@ -154,4 +176,11 @@ def download_receipt(
         raise HTTPException(status_code=404, detail="Ausgabe nicht gefunden")
     if not expense.receipt_path or not os.path.exists(expense.receipt_path):
         raise HTTPException(status_code=404, detail="Kein Beleg hinterlegt")
-    return FileResponse(expense.receipt_path)
+    suffix = os.path.splitext(expense.receipt_path)[1].lower()
+    media_type = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".pdf": "application/pdf",
+    }.get(suffix, "application/octet-stream")
+    return FileResponse(expense.receipt_path, media_type=media_type)

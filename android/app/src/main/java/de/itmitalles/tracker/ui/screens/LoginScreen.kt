@@ -45,7 +45,7 @@ fun LoginScreen(viewModel: AuthViewModel) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("tracker", style = MaterialTheme.typography.headlineMedium)
+        Text("Essentials+ Freelancer", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(8.dp))
 
         OutlinedTextField(
@@ -80,7 +80,7 @@ fun LoginScreen(viewModel: AuthViewModel) {
             CircularProgressIndicator()
         } else {
             Button(
-                onClick = { viewModel.login(serverUrl.trim().trimEnd('/'), username, password) },
+                onClick = { viewModel.login(serverUrl, username, password) },
                 enabled = serverUrl.isNotBlank() && username.isNotBlank() && password.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
             ) {

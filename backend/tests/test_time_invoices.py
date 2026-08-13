@@ -4,8 +4,10 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
+import pytest
 
 from app.models import CompanySettings, Invoice, TimeEntry
+from app.config import settings
 from app.time_utils import utc_now_naive
 
 
@@ -127,18 +129,31 @@ def test_invoice_pdf_status_and_delete_flow(
     missing_smtp = client.post(
         f"/api/invoices/{invoice['id']}/send", headers=auth_headers
     )
-    assert missing_smtp.status_code == 400
+    assert missing_smtp.status_code == 409
+    assert missing_smtp.json()["detail"]["code"] == "module_unavailable"
     db_session.expire_all()
     assert db_session.get(Invoice, invoice["id"]).status.value == "draft"
 
     monkeypatch.setattr(
         "app.routers.invoices.send_invoice_email", lambda *args, **kwargs: None
     )
+    monkeypatch.setattr(settings, "smtp_host", "smtp.test.invalid")
+    monkeypatch.setattr(settings, "smtp_from", "sender@example.invalid")
+    enabled = client.post(
+        "/api/admin/modules/communication.smtp/enable", headers=auth_headers
+    )
+    assert enabled.status_code == 200
+    assert enabled.json()["state"] == "enabled"
     sent = client.post(
         f"/api/invoices/{invoice['id']}/send", headers=auth_headers
     )
     assert sent.status_code == 200
     assert sent.json()["status"] == "sent"
+    repeated_send = client.post(
+        f"/api/invoices/{invoice['id']}/send", headers=auth_headers
+    )
+    assert repeated_send.status_code == 200
+    assert repeated_send.json()["status"] == "sent"
 
     paid = client.put(
         f"/api/invoices/{invoice['id']}/status",
@@ -165,6 +180,56 @@ def test_smtp_failure_keeps_invoice_as_draft(
         raise smtplib.SMTPException("synthetic SMTP failure")
 
     monkeypatch.setattr("app.routers.invoices.send_invoice_email", fail_smtp)
+    monkeypatch.setattr(settings, "smtp_host", "smtp.test.invalid")
+    monkeypatch.setattr(settings, "smtp_from", "sender@example.invalid")
+    assert (
+        client.post(
+            "/api/admin/modules/communication.smtp/enable", headers=auth_headers
+        ).status_code
+        == 200
+    )
+    failed = client.post(
+        f"/api/invoices/{invoice['id']}/send", headers=auth_headers
+    )
+    assert failed.status_code == 502
+    db_session.expire_all()
+    stored = db_session.get(Invoice, invoice["id"])
+    assert stored.status.value == "draft"
+    assert stored.sent_at is None
+
+
+@pytest.mark.parametrize(
+    "smtp_error",
+    [
+        TimeoutError("synthetic SMTP timeout"),
+        smtplib.SMTPRecipientsRefused(
+            {"billing@example.invalid": (550, b"synthetic rejection")}
+        ),
+        smtplib.SMTPServerDisconnected("synthetic connection loss"),
+    ],
+    ids=["timeout", "recipient-rejection", "disconnect"],
+)
+def test_specific_smtp_failures_never_mark_invoice_sent(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    db_session,
+    monkeypatch,
+    smtp_error: Exception,
+):
+    client_id = create_client(client, auth_headers)
+    entry_id = create_time_entry(client, auth_headers, client_id, 60)
+    invoice = create_invoice(client, auth_headers, client_id, entry_id).json()
+
+    def fail_smtp(*args, **kwargs):
+        raise smtp_error
+
+    monkeypatch.setattr("app.routers.invoices.send_invoice_email", fail_smtp)
+    monkeypatch.setattr(settings, "smtp_host", "smtp.test.invalid")
+    monkeypatch.setattr(settings, "smtp_from", "sender@example.invalid")
+    assert client.post(
+        "/api/admin/modules/communication.smtp/enable", headers=auth_headers
+    ).status_code == 200
+
     failed = client.post(
         f"/api/invoices/{invoice['id']}/send", headers=auth_headers
     )

@@ -1,12 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_module
 from app.models import Client, InvoiceLineItem, Project, Quote, TimeEntry, User
 from app.schemas import ProjectCreate, ProjectOut
 
-router = APIRouter(prefix="/api/projects", tags=["projects"])
+router = APIRouter(
+    prefix="/api/projects",
+    tags=["projects"],
+    dependencies=[Depends(require_module("core.projects"))],
+)
 
 
 def _client_or_404(db: Session, client_id: int) -> Client:
@@ -34,8 +38,12 @@ def _unique_name_or_400(
 
 @router.get("", response_model=list[ProjectOut])
 def list_projects(
+    response: Response,
     client_id: int | None = None,
     active: bool | None = None,
+    q: str | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -44,7 +52,15 @@ def list_projects(
         query = query.filter(Project.client_id == client_id)
     if active is not None:
         query = query.filter(Project.active == active)
-    return query.order_by(Project.active.desc(), Project.name).all()
+    if q:
+        query = query.filter(Project.name.ilike(f"%{q.strip()}%"))
+    response.headers["X-Total-Count"] = str(query.count())
+    return (
+        query.order_by(Project.active.desc(), Project.name)
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
 
 
 @router.post("", response_model=ProjectOut)

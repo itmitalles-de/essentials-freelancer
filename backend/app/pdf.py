@@ -57,6 +57,8 @@ def _generate_document(
     title: str,
     date_rows: list[tuple[str, str]],
     line_items: list,
+    subtotal: Decimal,
+    tax_total: Decimal,
     total: Decimal,
     notes: str,
     client: Client,
@@ -135,7 +137,7 @@ def _generate_document(
     story.append(meta_table)
     story.append(Spacer(1, 8 * mm))
 
-    table_data = [["Beschreibung", "Menge", "Einheit", "Einzelpreis", "Betrag"]]
+    table_data = [["Beschreibung", "Menge", "Einheit", "Einzelpreis netto", "Betrag brutto"]]
     for item in line_items:
         table_data.append(
             [
@@ -167,9 +169,21 @@ def _generate_document(
     story.append(items_table)
     story.append(Spacer(1, 4 * mm))
 
-    total_table = Table(
-        [["Gesamtbetrag", _eur(total)]], colWidths=[143 * mm, 32 * mm]
-    )
+    total_rows = [["Zwischensumme netto", _eur(subtotal)]]
+    tax_by_rate: dict[Decimal, Decimal] = {}
+    for item in line_items:
+        rate = Decimal(item.tax_rate)
+        tax_by_rate[rate] = tax_by_rate.get(rate, Decimal("0")) + Decimal(
+            item.tax_amount
+        )
+    for rate in sorted(tax_by_rate):
+        amount = tax_by_rate[rate]
+        if amount:
+            total_rows.append([f"Steuer {rate:.2f} %", _eur(amount)])
+    if tax_total and not any(tax_by_rate.values()):
+        total_rows.append(["Steuer", _eur(tax_total)])
+    total_rows.append(["Gesamtbetrag", _eur(total)])
+    total_table = Table(total_rows, colWidths=[143 * mm, 32 * mm])
     total_table.setStyle(
         TableStyle(
             [
@@ -230,6 +244,8 @@ def generate_invoice_pdf(
             ("Fällig am:", invoice.due_date.strftime("%d.%m.%Y")),
         ],
         line_items=invoice.line_items,
+        subtotal=Decimal(invoice.subtotal),
+        tax_total=Decimal(invoice.tax_total),
         total=Decimal(invoice.total),
         notes=invoice.notes,
         client=client,
@@ -256,6 +272,8 @@ def generate_quote_pdf(
             ("Gültig bis:", quote.valid_until.strftime("%d.%m.%Y")),
         ],
         line_items=quote.line_items,
+        subtotal=Decimal(quote.subtotal),
+        tax_total=Decimal(quote.tax_total),
         total=Decimal(quote.total),
         notes=quote.notes,
         client=client,

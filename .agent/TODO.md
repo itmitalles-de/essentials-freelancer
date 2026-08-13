@@ -1,42 +1,39 @@
 # TODO
 
-This is the repository's authoritative task and continuation source. GitHub
-issues were empty at the 2026-08-13 handoff; add links here if an external task
-source becomes authoritative.
+This is the authoritative continuation source. `docs/NICE_TO_HAVE.md` is an idea
+record, not an active backlog.
 
 ## Now
 
-- [ ] On disposable Compose infrastructure with test-only credentials, run the
-  complete `scripts/smoke-test.sh` flow and a fresh business-data export followed
-  by the empty-target restore rehearsal in `docs/BACKUP_RESTORE.md`. Record the
-  date, revision, and outcome in `.agent/STATE.md`.
-
-## Next
-
-- [ ] Once an approved offsite target and deployment access exist, initialize
-  and verify the restic repository, run `freelancer-backup.service` manually,
-  confirm the remote snapshot, rehearse a restore, and only then enable or trust
-  `freelancer-backup.timer`.
-- [ ] Exercise invoice SMTP delivery and failure handling against a safe test
-  server before recording that path as production-proven.
-
-## Later
-
-- [ ] Add focused Android unit or instrumentation coverage when a mobile core
-  flow is next changed; current automation assembles the debug APK only.
+- [ ] Review the Draft PR checks for
+  `agent/essentials-freelancer-autonomous`; address reproducible repository/CI
+  failures without weakening or skipping the full acceptance target.
 
 ## Blocked
 
-- [ ] Confirm the deployed production revision, service health, volume state,
-  proxy/DNS path, and latest recoverable offsite snapshot. Blocked on authorized
-  production access and deployment-specific evidence.
+- [ ] Prove the revision actually deployed, service/readiness state, legacy
+  volumes, and public proxy/DNS/TLS path. Blocked on authorized production or
+  staging access and deployment-specific evidence.
+- [ ] Prove real SMTP authentication, provider acceptance and delivery to a safe
+  controlled recipient while retaining failed-send state guarantees. Blocked on
+  an approved external SMTP test account and recipient.
+- [ ] Initialize/inspect the approved remote restic/rclone target, run the real
+  scheduled service, verify retention, and restore into isolated infrastructure.
+  Blocked on provider selection, protected credentials, and deployment access.
+- [ ] Verify Android behavior on supported devices/emulators and release signing
+  if a distributable release is required. Blocked on the release environment and
+  signing authority; debug/JVM automation is already present.
 
 ## Recently completed
 
-- [x] Add CI, backend/frontend tests, migrations, projects, quotes, invoice
-  traceability, and guarded core workflows (`afc2e45`, 2026-08-13).
-- [x] Add consistent PostgreSQL/document export and empty-target restore tooling
-  (`afc2e45`, 2026-08-13).
-- [x] Add encrypted offsite backup automation and systemd scheduling assets
-  (`42b030b`, `52ab610`, 2026-08-13).
-- [x] Replace the generic root handoff with this single persistent task source.
+- [x] Implement Essentials+ manifests, persisted states, server/navigation/job
+  enforcement, grouped Admin Center, auditing, dependency rules and secret
+  redaction (`a1464f8`, 2026-08-13).
+- [x] Implement the deterministic versioned quote assistant with immutable
+  Decimal snapshots, human approval and idempotent transfer (`d93d997`,
+  2026-08-13).
+- [x] Add reporting/CSV, constraints/indexes/idempotency, structured operational
+  behavior, MIME/security/rate-limit hardening and tests (`59245b0`, 2026-08-13).
+- [x] Add the disposable API/browser/SMTP/export/restic/empty-target restore
+  acceptance target, CI integration, verification matrix, and explicit external
+  evidence boundaries on the active branch.

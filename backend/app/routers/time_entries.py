@@ -1,9 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import date
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, require_module
+from app.idempotency import request_fingerprint
 from app.models import Client, CompanySettings, Project, TimeEntry, User
 from app.schemas import (
     TimeEntryCreate,
@@ -13,7 +16,11 @@ from app.schemas import (
 )
 from app.time_utils import utc_now_naive
 
-router = APIRouter(prefix="/api/time-entries", tags=["time-entries"])
+router = APIRouter(
+    prefix="/api/time-entries",
+    tags=["time-entries"],
+    dependencies=[Depends(require_module("core.time_tracking"))],
+)
 
 
 def _project_for_client(
@@ -48,9 +55,14 @@ def _default_rate(db: Session, client: Client, project: Project | None = None) -
 
 @router.get("", response_model=list[TimeEntryOut])
 def list_time_entries(
+    response: Response,
     client_id: int | None = None,
     project_id: int | None = None,
     billed: bool | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -61,7 +73,17 @@ def list_time_entries(
         query = query.filter(TimeEntry.project_id == project_id)
     if billed is not None:
         query = query.filter(TimeEntry.billed == billed)
-    return query.order_by(TimeEntry.date.desc(), TimeEntry.id.desc()).all()
+    if date_from is not None:
+        query = query.filter(TimeEntry.date >= date_from)
+    if date_to is not None:
+        query = query.filter(TimeEntry.date <= date_to)
+    response.headers["X-Total-Count"] = str(query.count())
+    return (
+        query.order_by(TimeEntry.date.desc(), TimeEntry.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
 
 
 @router.post("", response_model=TimeEntryOut)
@@ -128,9 +150,27 @@ def delete_time_entry(
 @router.post("/start", response_model=TimeEntryOut)
 def start_timer(
     payload: TimeEntryStart,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    fingerprint = request_fingerprint(payload.model_dump(mode="json"))
+    if idempotency_key is not None:
+        idempotency_key = idempotency_key.strip()
+        if not idempotency_key or len(idempotency_key) > 128:
+            raise HTTPException(status_code=400, detail="Ungültiger Idempotency-Key")
+        existing = (
+            db.query(TimeEntry)
+            .filter(TimeEntry.start_request_key == idempotency_key)
+            .first()
+        )
+        if existing is not None:
+            if existing.start_request_fingerprint != fingerprint:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Idempotency-Key wurde bereits für andere Eingabedaten verwendet",
+                )
+            return existing
     client = db.get(Client, payload.client_id)
     if client is None:
         raise HTTPException(status_code=404, detail="Kunde nicht gefunden")
@@ -139,6 +179,8 @@ def start_timer(
         db.query(TimeEntry).filter(TimeEntry.running_started_at.isnot(None)).first()
     )
     if running is not None:
+        if idempotency_key is not None and running.start_request_key == idempotency_key:
+            return running
         raise HTTPException(
             status_code=400, detail="Es läuft bereits ein Timer, zuerst stoppen"
         )
@@ -151,12 +193,27 @@ def start_timer(
         duration_minutes=0,
         hourly_rate=_default_rate(db, client, project),
         running_started_at=now,
+        start_request_key=idempotency_key,
+        start_request_fingerprint=fingerprint if idempotency_key else None,
     )
     db.add(entry)
     try:
         db.commit()
     except IntegrityError:
         db.rollback()
+        if idempotency_key is not None:
+            existing = (
+                db.query(TimeEntry)
+                .filter(TimeEntry.start_request_key == idempotency_key)
+                .first()
+            )
+            if existing is not None:
+                if existing.start_request_fingerprint != fingerprint:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Idempotency-Key wurde bereits für andere Eingabedaten verwendet",
+                    )
+                return existing
         raise HTTPException(
             status_code=400, detail="Es läuft bereits ein Timer, zuerst stoppen"
         )
@@ -170,11 +227,16 @@ def stop_timer(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    entry = db.get(TimeEntry, entry_id)
+    entry = (
+        db.query(TimeEntry)
+        .filter(TimeEntry.id == entry_id)
+        .with_for_update()
+        .one_or_none()
+    )
     if entry is None:
         raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")
     if entry.running_started_at is None:
-        raise HTTPException(status_code=400, detail="Timer läuft nicht")
+        return entry
     elapsed = utc_now_naive() - entry.running_started_at
     entry.duration_minutes += max(1, round(elapsed.total_seconds() / 60))
     entry.running_started_at = None

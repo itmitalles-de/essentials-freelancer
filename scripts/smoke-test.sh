@@ -77,6 +77,8 @@ api_json PUT "/api/quotes/$quote_id/status" '{"status":"sent"}' >/dev/null
 api_json PUT "/api/quotes/$quote_id/status" '{"status":"accepted"}' >/dev/null
 converted=$(api_json POST "/api/quotes/$quote_id/convert")
 converted_invoice_id=$(printf '%s' "$converted" | json_value converted_invoice_id)
-[ -n "$converted_invoice_id" ] && [ "$converted_invoice_id" != None ] || die 'quote conversion returned no invoice'
+if [ -z "$converted_invoice_id" ] || [ "$converted_invoice_id" = None ]; then
+  die 'quote conversion returned no invoice'
+fi
 
 printf 'smoke: customer -> project -> time -> invoice %s -> PDF and quote conversion passed\n' "$invoice_number"
