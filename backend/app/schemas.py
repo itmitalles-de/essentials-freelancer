@@ -491,3 +491,49 @@ class AssistantDraftOut(AssistantPreviewOut):
     transferred_at: dt.datetime | None
     created_at: dt.datetime
     updated_at: dt.datetime
+
+
+# ---- Operational reporting ----
+class TimeReportGroup(BaseModel):
+    client_id: int
+    project_id: int | None
+    captured_hours: Decimal
+    unbilled_hours: Decimal
+
+
+class TimeReport(BaseModel):
+    captured_hours: Decimal
+    unbilled_hours: Decimal
+    groups: list[TimeReportGroup]
+
+
+class QuoteReport(BaseModel):
+    statuses: dict[str, int]
+    conversion_rate_percent: Decimal
+
+
+class InvoiceReport(BaseModel):
+    statuses: dict[str, int]
+    open_amount: Decimal
+    paid_amount: Decimal
+
+
+class ExpenseCategoryReport(BaseModel):
+    category: str
+    amount: Decimal
+
+
+class ExpenseReport(BaseModel):
+    total: Decimal
+    categories: list[ExpenseCategoryReport]
+
+
+class ReportSummary(BaseModel):
+    date_from: dt.date | None
+    date_to: dt.date | None
+    client_id: int | None
+    project_id: int | None
+    time: TimeReport
+    quotes: QuoteReport
+    invoices: InvoiceReport
+    expenses: ExpenseReport

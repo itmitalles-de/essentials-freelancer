@@ -109,6 +109,36 @@ export interface Expense {
   has_receipt: boolean;
 }
 
+export interface ReportSummary {
+  date_from: string | null;
+  date_to: string | null;
+  client_id: number | null;
+  project_id: number | null;
+  time: {
+    captured_hours: string;
+    unbilled_hours: string;
+    groups: {
+      client_id: number;
+      project_id: number | null;
+      captured_hours: string;
+      unbilled_hours: string;
+    }[];
+  };
+  quotes: {
+    statuses: Record<QuoteStatus, number>;
+    conversion_rate_percent: string;
+  };
+  invoices: {
+    statuses: Record<InvoiceStatus | "overdue", number>;
+    open_amount: string;
+    paid_amount: string;
+  };
+  expenses: {
+    total: string;
+    categories: { category: string; amount: string }[];
+  };
+}
+
 export interface CompanySettings {
   company_name: string;
   owner_name: string;

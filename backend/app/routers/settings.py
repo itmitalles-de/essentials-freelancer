@@ -10,6 +10,7 @@ from app.database import get_db
 from app.deps import get_current_user, require_module
 from app.models import CompanySettings, User
 from app.schemas import CompanySettingsOut, CompanySettingsUpdate
+from app.upload_validation import validate_image
 
 router = APIRouter(
     prefix="/api/settings",
@@ -69,20 +70,35 @@ async def upload_logo(
     content = await file.read()
     if len(content) > MAX_LOGO_SIZE:
         raise HTTPException(status_code=400, detail="Logo darf maximal 5 MB groß sein")
+    validate_image(content, file.content_type or "", "Das Logo")
 
     company = _get_or_create(db)
     os.makedirs(app_settings.pdf_storage_dir, exist_ok=True)
-
-    if company.logo_path and os.path.exists(company.logo_path):
-        os.remove(company.logo_path)
-
+    old_path = company.logo_path
     file_name = f"logo-{uuid.uuid4().hex}{extension}"
     file_path = os.path.join(app_settings.pdf_storage_dir, file_name)
-    with open(file_path, "wb") as f:
-        f.write(content)
-
-    company.logo_path = file_path
-    db.commit()
+    temporary_path = f"{file_path}.tmp"
+    try:
+        with open(temporary_path, "xb") as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary_path, file_path)
+        company.logo_path = file_path
+        db.commit()
+    except Exception:
+        db.rollback()
+        for path in (temporary_path, file_path):
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+        raise
+    if old_path and old_path != file_path:
+        try:
+            os.remove(old_path)
+        except FileNotFoundError:
+            pass
     db.refresh(company)
     return CompanySettingsOut.from_model(company)
 
@@ -94,7 +110,8 @@ def download_logo(
     company = _get_or_create(db)
     if not company.logo_path or not os.path.exists(company.logo_path):
         raise HTTPException(status_code=404, detail="Kein Logo hinterlegt")
-    return FileResponse(company.logo_path)
+    media_type = "image/png" if company.logo_path.lower().endswith(".png") else "image/jpeg"
+    return FileResponse(company.logo_path, media_type=media_type)
 
 
 @router.delete("/logo", response_model=CompanySettingsOut)

@@ -9,7 +9,7 @@ from app.config import settings
 
 
 PRODUCT_VERSION = "0.2.0"
-SCHEMA_VERSION = "0004_quote_assistant"
+SCHEMA_VERSION = "0005_operational_hardening"
 
 
 class ModuleState(StrEnum):

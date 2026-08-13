@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -15,9 +15,20 @@ router = APIRouter(
 
 @router.get("", response_model=list[ClientOut])
 def list_clients(
+    response: Response,
+    q: str | None = None,
+    active: bool | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
-    return db.query(Client).order_by(Client.name).all()
+    query = db.query(Client)
+    if q:
+        query = query.filter(Client.name.ilike(f"%{q.strip()}%"))
+    if active is not None:
+        query = query.filter(Client.active == active)
+    response.headers["X-Total-Count"] = str(query.count())
+    return query.order_by(Client.name).offset(offset).limit(limit).all()
 
 
 @router.post("", response_model=ClientOut)

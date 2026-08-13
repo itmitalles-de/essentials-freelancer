@@ -16,11 +16,14 @@ os.environ.update(
         "ADMIN_PASSWORD": "test-only-password",
         "PDF_STORAGE_DIR": str(TEST_ROOT / "documents"),
         "RUN_MIGRATIONS": "false",
+        "LOGIN_RATE_LIMIT_PER_MINUTE": "1000",
+        "SMTP_RATE_LIMIT_PER_MINUTE": "1000",
     }
 )
 
 from app.database import Base, SessionLocal, engine  # noqa: E402
 from app.main import app, seed_admin  # noqa: E402
+from app.rate_limit import limiter  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -28,6 +31,7 @@ def reset_storage() -> Iterator[None]:
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     seed_admin()
+    limiter.reset()
     documents = TEST_ROOT / "documents"
     shutil.rmtree(documents, ignore_errors=True)
     documents.mkdir(parents=True)

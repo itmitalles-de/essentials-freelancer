@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     smtp_from: str | None = None
     smtp_use_tls: bool = True
     smtp_timeout_seconds: float = 10.0
+    login_rate_limit_per_minute: int = 10
+    smtp_rate_limit_per_minute: int = 10
+
+    # Comma-separated browser origins. Empty keeps the default same-origin
+    # deployment closed while native clients remain unaffected.
+    cors_allowed_origins: str = ""
 
     # The backend only needs readiness indicators for the host-managed restic
     # configuration. Repository locations and password material stay outside

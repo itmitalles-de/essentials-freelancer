@@ -3,7 +3,7 @@ import uuid
 from datetime import date, timedelta
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -79,8 +79,14 @@ def _replace_line_items(quote: Quote, payload: QuoteCreate) -> Decimal:
 
 @router.get("", response_model=list[QuoteOut])
 def list_quotes(
+    response: Response,
     client_id: int | None = None,
     project_id: int | None = None,
+    status_filter: QuoteStatus | None = Query(default=None, alias="status"),
+    date_from: date | None = None,
+    date_to: date | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -89,7 +95,14 @@ def list_quotes(
         query = query.filter(Quote.client_id == client_id)
     if project_id is not None:
         query = query.filter(Quote.project_id == project_id)
-    return query.order_by(Quote.id.desc()).all()
+    if status_filter is not None:
+        query = query.filter(Quote.status == status_filter)
+    if date_from is not None:
+        query = query.filter(Quote.issue_date >= date_from)
+    if date_to is not None:
+        query = query.filter(Quote.issue_date <= date_to)
+    response.headers["X-Total-Count"] = str(query.count())
+    return query.order_by(Quote.id.desc()).offset(offset).limit(limit).all()
 
 
 @router.post("", response_model=QuoteOut)
@@ -263,12 +276,12 @@ def convert_quote_to_invoice(
     )
     if quote is None:
         raise HTTPException(status_code=404, detail="Angebot nicht gefunden")
+    if quote.converted_invoice_id is not None:
+        return quote
     if quote.status != QuoteStatus.accepted:
         raise HTTPException(
             status_code=400, detail="Nur angenommene Angebote können übernommen werden"
         )
-    if quote.converted_invoice_id is not None:
-        raise HTTPException(status_code=400, detail="Angebot wurde bereits übernommen")
 
     client = db.get(Client, quote.client_id)
     company = _get_or_create_settings(db, lock_for_invoice_number=True)

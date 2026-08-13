@@ -90,6 +90,29 @@ async function openAuthenticatedPdf(path: string, fileName: string) {
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
+export async function downloadAuthenticated(path: string, fileName: string) {
+  const token = getToken();
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      detail = errorMessage(await res.json(), detail);
+    } catch {
+      /* response is not JSON */
+    }
+    throw new ApiError(res.status, detail);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
 export function openInvoicePdf(invoiceId: number, invoiceNumber: string) {
   return openAuthenticatedPdf(
     `/invoices/${invoiceId}/pdf`,

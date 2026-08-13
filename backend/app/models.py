@@ -106,6 +106,12 @@ class Client(Base):
     projects: Mapped[list["Project"]] = relationship(back_populates="client")
     quotes: Mapped[list["Quote"]] = relationship(back_populates="client")
 
+    __table_args__ = (
+        CheckConstraint(
+            "hourly_rate IS NULL OR hourly_rate >= 0", name="ck_clients_hourly_rate"
+        ),
+    )
+
 
 class Project(Base):
     __tablename__ = "projects"
@@ -124,6 +130,9 @@ class Project(Base):
 
     __table_args__ = (
         UniqueConstraint("client_id", "name", name="uq_projects_client_name"),
+        CheckConstraint(
+            "hourly_rate IS NULL OR hourly_rate >= 0", name="ck_projects_hourly_rate"
+        ),
     )
 
 
@@ -147,6 +156,12 @@ class TimeEntry(Base):
         ForeignKey("invoices.id"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+    start_request_key: Mapped[str | None] = mapped_column(
+        String(128), nullable=True
+    )
+    start_request_fingerprint: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
 
     client: Mapped["Client"] = relationship(back_populates="time_entries")
     project: Mapped["Project | None"] = relationship(back_populates="time_entries")
@@ -159,6 +174,18 @@ class TimeEntry(Base):
             unique=True,
             postgresql_where=text("running_started_at IS NOT NULL"),
             sqlite_where=text("running_started_at IS NOT NULL"),
+        ),
+        Index(
+            "ix_time_entries_reporting",
+            "date",
+            "client_id",
+            "project_id",
+            "billed",
+        ),
+        CheckConstraint("duration_minutes >= 0", name="ck_time_entries_duration"),
+        CheckConstraint("hourly_rate >= 0", name="ck_time_entries_hourly_rate"),
+        UniqueConstraint(
+            "start_request_key", name="uq_time_entries_start_request_key"
         ),
     )
 
@@ -185,11 +212,26 @@ class Invoice(Base):
     quote_id: Mapped[int | None] = mapped_column(
         ForeignKey("quotes.id"), nullable=True, unique=True
     )
+    request_key: Mapped[str | None] = mapped_column(
+        String(128), nullable=True
+    )
+    request_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     client: Mapped["Client"] = relationship(back_populates="invoices")
     time_entries: Mapped[list["TimeEntry"]] = relationship(back_populates="invoice")
     line_items: Mapped[list["InvoiceLineItem"]] = relationship(
         back_populates="invoice", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index("ix_invoices_reporting", "issue_date", "client_id", "status"),
+        Index("ix_invoices_due_status", "due_date", "status"),
+        CheckConstraint("due_date >= issue_date", name="ck_invoices_date_order"),
+        CheckConstraint(
+            "subtotal >= 0 AND tax_total >= 0 AND total >= 0",
+            name="ck_invoices_totals",
+        ),
+        UniqueConstraint("request_key", name="uq_invoices_request_key"),
     )
 
 
@@ -247,6 +289,15 @@ class Quote(Base):
         back_populates="quote", cascade="all, delete-orphan"
     )
 
+    __table_args__ = (
+        Index("ix_quotes_reporting", "issue_date", "client_id", "project_id", "status"),
+        CheckConstraint("valid_until >= issue_date", name="ck_quotes_date_order"),
+        CheckConstraint(
+            "subtotal >= 0 AND tax_total >= 0 AND total >= 0",
+            name="ck_quotes_totals",
+        ),
+    )
+
 
 class QuoteLineItem(Base):
     __tablename__ = "quote_line_items"
@@ -275,6 +326,11 @@ class Expense(Base):
     amount: Mapped[float] = mapped_column(Numeric(10, 2))
     receipt_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+
+    __table_args__ = (
+        Index("ix_expenses_reporting", "date", "category"),
+        CheckConstraint("amount >= 0", name="ck_expenses_amount"),
+    )
 
 
 class ModuleInstallation(Base):

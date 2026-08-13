@@ -363,7 +363,11 @@ def test_draft_snapshot_human_approval_transfer_and_one_time_invoice_conversion(
     assert Decimal(invoice["subtotal"]) == Decimal("209.00")
     assert Decimal(invoice["tax_total"]) == Decimal("39.71")
     assert Decimal(invoice["total"]) == Decimal("248.71")
-    assert client.post(f"/api/quotes/{quote_id}/convert", headers=auth_headers).status_code == 400
+    repeated_conversion = client.post(
+        f"/api/quotes/{quote_id}/convert", headers=auth_headers
+    )
+    assert repeated_conversion.status_code == 200
+    assert repeated_conversion.json()["converted_invoice_id"] == invoice_id
 
     disabled = client.post(
         "/api/admin/modules/sales.quote_assistant/disable", headers=auth_headers

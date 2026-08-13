@@ -181,6 +181,84 @@ body {
   font-weight: 700;
 }
 
+.report-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.report-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.report-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.report-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.report-metric span {
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+}
+
+.report-metric strong {
+  font-size: 1.35rem;
+}
+
+.report-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.report-heading h3 {
+  margin: 0;
+}
+
+.report-two-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.report-section {
+  overflow-x: auto;
+}
+
+.report-statuses {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.report-statuses div {
+  border-left: 3px solid var(--accent);
+  padding-left: 0.6rem;
+}
+
+.report-statuses dt {
+  color: var(--fg-muted);
+}
+
+.report-statuses dd {
+  margin: 0.2rem 0 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
 a {
   color: var(--accent);
   text-decoration: none;
