@@ -17,10 +17,18 @@ async function login(page: import("@playwright/test").Page) {
 async function expectNoSeriousAccessibilityViolations(
   page: import("@playwright/test").Page
 ) {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   for (const theme of ["light", "dark"] as const) {
     await page.evaluate((selectedTheme) => {
       document.documentElement.dataset.theme = selectedTheme;
     }, theme);
+    await page.waitForFunction(
+      (selectedTheme) => {
+        const expected = selectedTheme === "dark" ? "rgb(20, 22, 26)" : "rgb(245, 246, 248)";
+        return getComputedStyle(document.body).backgroundColor === expected;
+      },
+      theme
+    );
     const result = await new AxeBuilder({ page }).analyze();
     const serious = result.violations.filter((item) =>
       ["serious", "critical"].includes(item.impact ?? "")
