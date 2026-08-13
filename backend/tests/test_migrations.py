@@ -28,7 +28,7 @@ def test_base_migration_creates_empty_database_and_revision_chain(tmp_path):
         "invoices",
     } <= tables
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0003_modules"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0004_quote_assistant"
 
 
 def test_legacy_baseline_refuses_partial_schema(tmp_path):

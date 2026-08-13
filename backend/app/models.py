@@ -1,5 +1,6 @@
 import enum
 from datetime import date, datetime
+from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
@@ -35,6 +36,18 @@ class QuoteStatus(str, enum.Enum):
     accepted = "accepted"
     rejected = "rejected"
     converted = "converted"
+
+
+class CatalogItemKind(str, enum.Enum):
+    service = "service"
+    material = "material"
+    travel = "travel"
+
+
+class AssistantDraftStatus(str, enum.Enum):
+    draft = "draft"
+    approved = "approved"
+    transferred = "transferred"
 
 
 class User(Base):
@@ -161,7 +174,9 @@ class Invoice(Base):
     status: Mapped[InvoiceStatus] = mapped_column(
         Enum(InvoiceStatus), default=InvoiceStatus.draft
     )
-    total: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
+    subtotal: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    tax_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    total: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     notes: Mapped[str] = mapped_column(Text, default="")
     pdf_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -186,7 +201,10 @@ class InvoiceLineItem(Base):
     description: Mapped[str] = mapped_column(Text)
     quantity: Mapped[float] = mapped_column(Numeric(10, 2))
     unit_price: Mapped[float] = mapped_column(Numeric(10, 2))
-    amount: Mapped[float] = mapped_column(Numeric(10, 2))
+    net_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    tax_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=0)
+    tax_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     unit: Mapped[str] = mapped_column(String(32), default="hours")
     project_id: Mapped[int | None] = mapped_column(
         ForeignKey("projects.id"), nullable=True, index=True
@@ -209,7 +227,9 @@ class Quote(Base):
     status: Mapped[QuoteStatus] = mapped_column(
         Enum(QuoteStatus), default=QuoteStatus.draft
     )
-    total: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
+    subtotal: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    tax_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    total: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     notes: Mapped[str] = mapped_column(Text, default="")
     pdf_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     converted_invoice_id: Mapped[int | None] = mapped_column(
@@ -237,7 +257,10 @@ class QuoteLineItem(Base):
     quantity: Mapped[float] = mapped_column(Numeric(10, 2))
     unit: Mapped[str] = mapped_column(String(32), default="hours")
     unit_price: Mapped[float] = mapped_column(Numeric(10, 2))
-    amount: Mapped[float] = mapped_column(Numeric(10, 2))
+    net_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    tax_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=0)
+    tax_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
 
     quote: Mapped["Quote"] = relationship(back_populates="line_items")
 
@@ -286,3 +309,266 @@ class ModuleAuditEvent(Base):
     resulting_state: Mapped[str] = mapped_column(String(32), nullable=False)
     actor: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+
+
+class QuoteCatalogItem(Base):
+    __tablename__ = "quote_catalog_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    stable_key: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    kind: Mapped[CatalogItemKind] = mapped_column(Enum(CatalogItemKind), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+
+    versions: Mapped[list["QuoteCatalogVersion"]] = relationship(
+        back_populates="item", cascade="all, delete-orphan"
+    )
+
+
+class QuoteCatalogVersion(Base):
+    __tablename__ = "quote_catalog_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    item_id: Mapped[int] = mapped_column(
+        ForeignKey("quote_catalog_items.id"), nullable=False, index=True
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    unit: Mapped[str] = mapped_column(String(32), nullable=False)
+    net_unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    tax_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    valid_from: Mapped[date] = mapped_column(Date, nullable=False)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+
+    item: Mapped["QuoteCatalogItem"] = relationship(back_populates="versions")
+
+    __table_args__ = (
+        UniqueConstraint("item_id", "version", name="uq_quote_catalog_item_version"),
+        CheckConstraint("tax_rate >= 0 AND tax_rate <= 100", name="ck_catalog_tax_rate"),
+        CheckConstraint(
+            "valid_until IS NULL OR valid_until >= valid_from",
+            name="ck_catalog_validity",
+        ),
+    )
+
+
+class QuotePackage(Base):
+    __tablename__ = "quote_packages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    stable_key: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+
+    versions: Mapped[list["QuotePackageVersion"]] = relationship(
+        back_populates="package", cascade="all, delete-orphan"
+    )
+
+
+class QuotePackageVersion(Base):
+    __tablename__ = "quote_package_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    package_id: Mapped[int] = mapped_column(
+        ForeignKey("quote_packages.id"), nullable=False, index=True
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    valid_from: Mapped[date] = mapped_column(Date, nullable=False)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+
+    package: Mapped["QuotePackage"] = relationship(back_populates="versions")
+    items: Mapped[list["QuotePackageVersionItem"]] = relationship(
+        back_populates="package_version", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        UniqueConstraint("package_id", "version", name="uq_quote_package_version"),
+        CheckConstraint(
+            "valid_until IS NULL OR valid_until >= valid_from",
+            name="ck_package_validity",
+        ),
+    )
+
+
+class QuotePackageVersionItem(Base):
+    __tablename__ = "quote_package_version_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    package_version_id: Mapped[int] = mapped_column(
+        ForeignKey("quote_package_versions.id"), nullable=False, index=True
+    )
+    catalog_version_id: Mapped[int] = mapped_column(
+        ForeignKey("quote_catalog_versions.id"), nullable=False, index=True
+    )
+    quantity: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    package_version: Mapped["QuotePackageVersion"] = relationship(back_populates="items")
+    catalog_version: Mapped["QuoteCatalogVersion"] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint(
+            "package_version_id",
+            "catalog_version_id",
+            "sort_order",
+            name="uq_quote_package_version_item_order",
+        ),
+        CheckConstraint("quantity > 0", name="ck_package_item_quantity"),
+    )
+
+
+class QuoteAssistantTemplate(Base):
+    __tablename__ = "quote_assistant_templates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    stable_key: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+
+    versions: Mapped[list["QuoteAssistantTemplateVersion"]] = relationship(
+        back_populates="template", cascade="all, delete-orphan"
+    )
+
+
+class QuoteAssistantTemplateVersion(Base):
+    __tablename__ = "quote_assistant_template_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    template_id: Mapped[int] = mapped_column(
+        ForeignKey("quote_assistant_templates.id"), nullable=False, index=True
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    questions_json: Mapped[str] = mapped_column(Text, default="[]")
+    surcharge_percent: Mapped[Decimal] = mapped_column(Numeric(7, 2), default=0)
+    discount_percent: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+
+    template: Mapped["QuoteAssistantTemplate"] = relationship(back_populates="versions")
+    selections: Mapped[list["QuoteAssistantTemplateSelection"]] = relationship(
+        back_populates="template_version", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "template_id", "version", name="uq_quote_assistant_template_version"
+        ),
+        CheckConstraint("surcharge_percent >= 0", name="ck_template_surcharge"),
+        CheckConstraint(
+            "discount_percent >= 0 AND discount_percent <= 100",
+            name="ck_template_discount",
+        ),
+    )
+
+
+class QuoteAssistantTemplateSelection(Base):
+    __tablename__ = "quote_assistant_template_selections"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    template_version_id: Mapped[int] = mapped_column(
+        ForeignKey("quote_assistant_template_versions.id"), nullable=False, index=True
+    )
+    catalog_version_id: Mapped[int | None] = mapped_column(
+        ForeignKey("quote_catalog_versions.id"), nullable=True
+    )
+    package_version_id: Mapped[int | None] = mapped_column(
+        ForeignKey("quote_package_versions.id"), nullable=True
+    )
+    quantity: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    template_version: Mapped["QuoteAssistantTemplateVersion"] = relationship(
+        back_populates="selections"
+    )
+    catalog_version: Mapped["QuoteCatalogVersion | None"] = relationship()
+    package_version: Mapped["QuotePackageVersion | None"] = relationship()
+
+    __table_args__ = (
+        CheckConstraint(
+            "(catalog_version_id IS NOT NULL AND package_version_id IS NULL) OR "
+            "(catalog_version_id IS NULL AND package_version_id IS NOT NULL)",
+            name="ck_template_selection_source",
+        ),
+        CheckConstraint("quantity > 0", name="ck_template_selection_quantity"),
+    )
+
+
+class QuoteAssistantDraft(Base):
+    __tablename__ = "quote_assistant_drafts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id"), index=True)
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id"), nullable=True, index=True
+    )
+    template_version_id: Mapped[int | None] = mapped_column(
+        ForeignKey("quote_assistant_template_versions.id"), nullable=True
+    )
+    quote_id: Mapped[int | None] = mapped_column(
+        ForeignKey("quotes.id"), nullable=True, unique=True
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[AssistantDraftStatus] = mapped_column(
+        Enum(AssistantDraftStatus), default=AssistantDraftStatus.draft
+    )
+    pricing_date: Mapped[date] = mapped_column(Date, nullable=False)
+    guided_answers_json: Mapped[str] = mapped_column(Text, default="{}")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    surcharge_percent: Mapped[Decimal] = mapped_column(Numeric(7, 2), default=0)
+    discount_percent: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=0)
+    base_net_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    surcharge_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    discount_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    net_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    tax_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    total: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    transferred_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utc_now_naive, onupdate=utc_now_naive
+    )
+
+    lines: Mapped[list["QuoteAssistantDraftLine"]] = relationship(
+        back_populates="draft", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        CheckConstraint("surcharge_percent >= 0", name="ck_assistant_surcharge"),
+        CheckConstraint(
+            "discount_percent >= 0 AND discount_percent <= 100",
+            name="ck_assistant_discount",
+        ),
+    )
+
+
+class QuoteAssistantDraftLine(Base):
+    __tablename__ = "quote_assistant_draft_lines"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    draft_id: Mapped[int] = mapped_column(
+        ForeignKey("quote_assistant_drafts.id"), nullable=False, index=True
+    )
+    catalog_version_id: Mapped[int] = mapped_column(
+        ForeignKey("quote_catalog_versions.id"), nullable=False
+    )
+    package_version_id: Mapped[int | None] = mapped_column(
+        ForeignKey("quote_package_versions.id"), nullable=True
+    )
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    unit: Mapped[str] = mapped_column(String(32), nullable=False)
+    unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    tax_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    net_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    tax_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    draft: Mapped["QuoteAssistantDraft"] = relationship(back_populates="lines")

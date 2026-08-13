@@ -31,6 +31,7 @@ export function Layout() {
         {isEnabled("core.projects") && <NavItem to="/projects">{t("nav.projects")}</NavItem>}
         {isEnabled("core.time_tracking") && <NavItem to="/time">{t("nav.time")}</NavItem>}
         {isEnabled("sales.quotes") && <NavItem to="/quotes">{t("nav.quotes")}</NavItem>}
+        {isEnabled("sales.quote_assistant") && <NavItem to="/quote-assistant">Angebotsassistent</NavItem>}
         {isEnabled("billing.invoices") && <NavItem to="/invoices">{t("nav.invoices")}</NavItem>}
         {isEnabled("expenses.receipts") && <NavItem to="/expenses">{t("nav.expenses")}</NavItem>}
         {isEnabled("core.platform") && <NavItem to="/settings">{t("nav.settings")}</NavItem>}

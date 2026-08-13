@@ -12,6 +12,7 @@ import { Settings } from "./pages/Settings";
 import { Projects } from "./pages/Projects";
 import { Quotes } from "./pages/Quotes";
 import { AdminModules } from "./pages/AdminModules";
+import { QuoteAssistant } from "./pages/QuoteAssistant";
 import { ModulesProvider, useModules } from "./contexts/ModulesContext";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="projects" element={<ModuleGate moduleId="core.projects"><Projects /></ModuleGate>} />
         <Route path="time" element={<ModuleGate moduleId="core.time_tracking"><TimeTracking /></ModuleGate>} />
         <Route path="quotes" element={<ModuleGate moduleId="sales.quotes"><Quotes /></ModuleGate>} />
+        <Route path="quote-assistant" element={<ModuleGate moduleId="sales.quote_assistant"><QuoteAssistant /></ModuleGate>} />
         <Route path="invoices" element={<ModuleGate moduleId="billing.invoices"><Invoices /></ModuleGate>} />
         <Route path="invoices/:id" element={<ModuleGate moduleId="billing.invoices"><InvoiceDetail /></ModuleGate>} />
         <Route path="expenses" element={<ModuleGate moduleId="expenses.receipts"><Expenses /></ModuleGate>} />

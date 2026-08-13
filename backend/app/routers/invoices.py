@@ -21,6 +21,7 @@ from app.models import (
     TimeEntry,
     User,
 )
+from app.money import money
 from app.pdf import generate_invoice_pdf
 from app.schemas import InvoiceCreate, InvoiceOut, InvoiceStatusUpdate
 from app.time_utils import utc_now_naive
@@ -122,6 +123,8 @@ def create_invoice(
         due_date=today + timedelta(days=due_days),
         status=InvoiceStatus.draft,
         notes=payload.notes,
+        subtotal=Decimal("0"),
+        tax_total=Decimal("0"),
         total=Decimal("0"),
     )
     db.add(invoice)
@@ -139,6 +142,9 @@ def create_invoice(
             quantity=hours.quantize(Decimal("0.01")),
             unit="hours",
             unit_price=rate,
+            net_amount=amount,
+            tax_rate=Decimal("0"),
+            tax_amount=Decimal("0"),
             amount=amount,
             project_id=entry.project_id,
         )
@@ -147,7 +153,9 @@ def create_invoice(
         entry.billed = True
         entry.invoice_id = invoice.id
 
-    invoice.total = total
+    invoice.subtotal = money(total)
+    invoice.tax_total = Decimal("0.00")
+    invoice.total = money(total)
     company.next_invoice_number += 1
     db.flush()
     db.refresh(invoice)

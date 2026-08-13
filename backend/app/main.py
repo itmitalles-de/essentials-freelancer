@@ -19,6 +19,7 @@ from app.routers import (
     invoices,
     modules,
     projects,
+    quote_assistant,
     quotes,
     settings as settings_router,
     time_entries,
@@ -78,6 +79,7 @@ app.include_router(time_entries.router)
 app.include_router(invoices.router)
 app.include_router(projects.router)
 app.include_router(quotes.router)
+app.include_router(quote_assistant.router)
 app.include_router(expenses.router)
 app.include_router(settings_router.router)
 app.include_router(modules.router)

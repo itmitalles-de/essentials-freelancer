@@ -21,6 +21,7 @@ from app.models import (
     QuoteStatus,
     User,
 )
+from app.money import line_amounts, money
 from app.pdf import generate_invoice_pdf, generate_quote_pdf
 from app.routers.invoices import _get_or_create_settings
 from app.schemas import QuoteCreate, QuoteOut, QuoteStatusUpdate
@@ -48,20 +49,31 @@ def _client_and_project(
 
 def _replace_line_items(quote: Quote, payload: QuoteCreate) -> Decimal:
     quote.line_items.clear()
+    subtotal = Decimal("0")
+    tax_total = Decimal("0")
     total = Decimal("0")
     for item in payload.line_items:
-        amount = (item.quantity * item.unit_price).quantize(Decimal("0.01"))
+        net_amount, tax_amount, amount = line_amounts(
+            item.quantity, item.unit_price, item.tax_rate
+        )
         quote.line_items.append(
             QuoteLineItem(
                 description=item.description,
                 quantity=item.quantity,
                 unit=item.unit,
                 unit_price=item.unit_price,
+                net_amount=net_amount,
+                tax_rate=item.tax_rate,
+                tax_amount=tax_amount,
                 amount=amount,
             )
         )
+        subtotal += net_amount
+        tax_total += tax_amount
         total += amount
-    quote.total = total
+    quote.subtotal = money(subtotal)
+    quote.tax_total = money(tax_total)
+    quote.total = money(total)
     return total
 
 
@@ -99,6 +111,8 @@ def create_quote(
         valid_until=today + timedelta(days=payload.valid_in_days),
         status=QuoteStatus.draft,
         notes=payload.notes,
+        subtotal=Decimal("0"),
+        tax_total=Decimal("0"),
         total=Decimal("0"),
     )
     db.add(quote)
@@ -267,6 +281,8 @@ def convert_quote_to_invoice(
         due_date=today + timedelta(days=company.default_payment_terms_days),
         status=InvoiceStatus.draft,
         notes=quote.notes,
+        subtotal=quote.subtotal,
+        tax_total=quote.tax_total,
         total=quote.total,
     )
     db.add(invoice)
@@ -278,6 +294,9 @@ def convert_quote_to_invoice(
                 quantity=item.quantity,
                 unit=item.unit,
                 unit_price=item.unit_price,
+                net_amount=item.net_amount,
+                tax_rate=item.tax_rate,
+                tax_amount=item.tax_amount,
                 amount=item.amount,
                 project_id=quote.project_id,
             )

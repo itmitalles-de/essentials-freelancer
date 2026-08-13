@@ -124,6 +124,63 @@ body {
   margin-top: auto;
 }
 
+.assistant-admin-grid,
+.assistant-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.quote-assistant label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.catalog-row,
+.draft-row,
+.button-row,
+.inline-form {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.selection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0.75rem;
+}
+
+.selection-card {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem;
+}
+
+.selection-card > span {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.selection-card input[type="number"] {
+  width: 8rem;
+}
+
+.calculation-preview {
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+}
+
+.assistant-total {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
 a {
   color: var(--accent);
   text-decoration: none;
