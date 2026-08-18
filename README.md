@@ -8,6 +8,13 @@ an optional Homer dashboard.
 Essentials+ Freelancer remains a single installation with one administrator. It is not a
 multi-tenant SaaS, shop system, inventory tool, or collaboration suite.
 
+The canonical private repository is
+`itmitalles-de/essentials-freelancer`. Visible product and repository naming is
+separate from deliberately retained persistence identifiers; see
+[`docs/COMPATIBILITY_IDENTIFIERS.md`](docs/COMPATIBILITY_IDENTIFIERS.md).
+The controlled first-internal-use boundary and its exit criteria are frozen in
+[`docs/PILOT_SCOPE.md`](docs/PILOT_SCOPE.md).
+
 ## Verified product scope
 
 - clients with contact data and individual hourly rates;

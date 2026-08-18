@@ -52,7 +52,7 @@ links:
     target: "_blank"
   - name: "GitHub"
     icon: "fab fa-github"
-    url: "https://github.com/itmitalles-de/freelancer"
+    url: "https://github.com/itmitalles-de/essentials-freelancer"
     target: "_blank"
   - name: "API-Status"
     icon: "fas fa-heart-pulse"
@@ -157,7 +157,7 @@ services:
         subtitle: "Essentials+ Freelancer Repository"
         tag: "Code"
         tagstyle: "is-dark"
-        url: "https://github.com/itmitalles-de/freelancer"
+        url: "https://github.com/itmitalles-de/essentials-freelancer"
         target: "_blank"
 
   - name: "Organisation"

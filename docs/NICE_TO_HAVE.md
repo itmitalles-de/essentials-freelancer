@@ -5,6 +5,11 @@ Essentials+ Freelancer scope. An entry is not planned work, a commitment, or a
 feature flag. None of these ideas has a stub, dependency, database table, or
 inactive implementation in the repository.
 
+During the first internal pilot, every new product idea belongs here rather
+than in implementation work. The binding pilot boundary and hard non-goals are
+defined in [`PILOT_SCOPE.md`](PILOT_SCOPE.md). Recording an idea here does not
+authorize a stub, empty API, schema object, hidden route, or disabled UI.
+
 ## Optional AI support in the quote assistant
 
 - **Benefit:** Suggests descriptions or candidate positions while retaining the
