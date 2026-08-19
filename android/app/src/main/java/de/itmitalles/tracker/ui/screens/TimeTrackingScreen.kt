@@ -28,6 +28,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -41,9 +42,9 @@ fun TimeTrackingScreen(viewModel: TimeViewModel) {
     val entries by viewModel.entries.collectAsState()
     val running by viewModel.running.collectAsState()
     val elapsed by viewModel.elapsedSeconds.collectAsState()
-    var showManualDialog by remember { mutableStateOf(false) }
-    var selectedClientId by remember { mutableStateOf<Int?>(null) }
-    var timerDescription by remember { mutableStateOf("") }
+    var showManualDialog by rememberSaveable { mutableStateOf(false) }
+    var selectedClientId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var timerDescription by rememberSaveable { mutableStateOf("") }
 
     Scaffold(
         floatingActionButton = {
@@ -181,10 +182,10 @@ private fun ManualEntryDialog(
     onDismiss: () -> Unit,
     onSave: (Int, String, String, Double) -> Unit,
 ) {
-    var selectedClientId by remember { mutableStateOf<Int?>(null) }
-    var date by remember { mutableStateOf(java.time.LocalDate.now().toString()) }
-    var description by remember { mutableStateOf("") }
-    var hours by remember { mutableStateOf("") }
+    var selectedClientId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var date by rememberSaveable { mutableStateOf(java.time.LocalDate.now().toString()) }
+    var description by rememberSaveable { mutableStateOf("") }
+    var hours by rememberSaveable { mutableStateOf("") }
 
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,

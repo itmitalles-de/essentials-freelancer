@@ -18,40 +18,52 @@ object ApiClient {
 
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
 
+    private fun buildRetrofit(normalizedBaseUrl: String, tokenProvider: () -> String?): Retrofit {
+        val authInterceptor = Interceptor { chain ->
+            val token = tokenProvider()
+            val request = chain.request().newBuilder().apply {
+                if (token != null) addHeader("Authorization", "Bearer $token")
+            }.build()
+            val response = chain.proceed(request)
+            if (response.code == 401 || response.code == 403) {
+                onUnauthorized?.invoke()
+            }
+            response
+        }
+
+        val logging = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BASIC
+        }
+
+        val client = OkHttpClient.Builder()
+            .addInterceptor(authInterceptor)
+            .addInterceptor(logging)
+            .build()
+
+        return Retrofit.Builder()
+            .baseUrl(normalizedBaseUrl)
+            .client(client)
+            .addConverterFactory(
+                json.asConverterFactory("application/json".toMediaType())
+            )
+            .build()
+    }
+
+    fun loginApi(baseUrl: String): TrackerApi =
+        buildRetrofit(normalizeServerUrl(baseUrl)) { null }.create(TrackerApi::class.java)
+
     fun api(baseUrl: String, tokenProvider: () -> String?): TrackerApi {
         val normalized = normalizeServerUrl(baseUrl)
         if (retrofit == null || currentBaseUrl != normalized) {
             currentBaseUrl = normalized
-
-            val authInterceptor = Interceptor { chain ->
-                val token = tokenProvider()
-                val request = chain.request().newBuilder().apply {
-                    if (token != null) addHeader("Authorization", "Bearer $token")
-                }.build()
-                val response = chain.proceed(request)
-                if (response.code == 401 || response.code == 403) {
-                    onUnauthorized?.invoke()
-                }
-                response
-            }
-
-            val logging = HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BASIC
-            }
-
-            val client = OkHttpClient.Builder()
-                .addInterceptor(authInterceptor)
-                .addInterceptor(logging)
-                .build()
-
-            retrofit = Retrofit.Builder()
-                .baseUrl(normalized)
-                .client(client)
-                .addConverterFactory(
-                    json.asConverterFactory("application/json".toMediaType())
-                )
-                .build()
+            retrofit = buildRetrofit(normalized, tokenProvider)
         }
         return retrofit!!.create(TrackerApi::class.java)
+    }
+
+    internal fun resetForTest() {
+        retrofit = null
+        currentBaseUrl = null
+        onUnauthorized = null
     }
 }

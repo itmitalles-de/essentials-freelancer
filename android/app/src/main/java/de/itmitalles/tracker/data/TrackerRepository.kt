@@ -13,7 +13,7 @@ class TrackerRepository(context: Context) {
 
     suspend fun login(serverUrl: String, username: String, password: String) {
         val normalizedUrl = normalizeServerUrl(serverUrl)
-        val api = ApiClient.api(normalizedUrl) { null }
+        val api = ApiClient.loginApi(normalizedUrl)
         val token = api.login(LoginRequest(username, password)).access_token
         settings.setServerUrl(normalizedUrl)
         settings.setToken(token)
