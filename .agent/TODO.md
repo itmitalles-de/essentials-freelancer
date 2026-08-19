@@ -52,3 +52,5 @@ idea record; the pilot feature freeze forbids implementation from that file.
   scan, SBOM generation, CODEOWNERS and settings documentation.
 - [x] Add the authenticated Android cache regression and API-35 pilot smoke
   scenario using unmistakably synthetic data.
+- [x] Run the unchanged `make full-check` from a clean implementation commit
+  and record all synthetic acceptance and cleanup evidence.

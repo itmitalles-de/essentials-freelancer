@@ -53,3 +53,27 @@ hardening. The local SMTP server and local Restic repository are fixtures. Real
 SMTP acceptance, a real encrypted offsite restore, the actual deployed commit,
 public TLS/proxy behavior, and API-35 emulator behavior remain separate evidence
 categories and must never be inferred from this run.
+
+## Post-hardening clean-head acceptance
+
+The unchanged `make full-check` entry point was run again from a clean pilot
+branch after the implementation commits. It completed at
+`2026-08-19T00:16:19Z` against commit
+`a711d06456c45cf10f33cf28aebdb1e7e1287f8f`, using the toolchain recorded
+above. No assertion or verification layer was weakened or skipped.
+
+| Layer | Clean-head result |
+|---|---|
+| Backend | Pass: 48 pytest tests; `pip-audit` reported no known vulnerabilities. |
+| Frontend | Pass: 8 Vitest files / 9 tests, production build, and `npm audit` with 0 vulnerabilities. |
+| Android local | Pass: 3 JVM tests plus debug app and instrumentation APK assembly. API-35 emulator execution remains separate CI evidence. |
+| API/PDF/SMTP fixture | Pass: explicit initial send and resend, idempotent replay without a duplicate, attachment/content checks, and rejection/timeout/disconnect failure-state checks. Authentication and partial-configuration cases passed in the backend suite. |
+| Playwright and axe | Pass: 2 source scenarios plus the same 2 restored-stack scenarios; 16 light/dark axe analyses reported no serious or critical violation. |
+| Export and deployment evidence | Pass: complete business export plus mode-0600 redacted JSON/Markdown deployment evidence and structural secret-redaction checks. |
+| Restic and isolated restore | Pass: one encrypted local snapshot (`sha256:664fa4bd0dbb`), repository check, retention evaluation, restore into new volumes, database/document/revision comparison, API/browser checks. |
+| Supply-chain evidence | Pass: SHA/digest policy checks, history-aware secret scan, dependency audits, and CycloneDX SBOM generation with 710 components. |
+| Cleanup | Pass: a post-run inventory found no run-specific `freelancer-fc-*` containers, volumes, or networks. |
+
+This remains synthetic local evidence. No real SMTP account, real offsite
+repository, authorized deployment target, public proxy/TLS path, production
+data, or customer address was exercised.

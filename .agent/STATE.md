@@ -64,8 +64,10 @@ compatibility identifiers. See `docs/COMPATIBILITY_IDENTIFIERS.md`.
 - **Synthetically tested locally:** focused backend (48), frontend (9), Android
   JVM (3) and APK assembly checks; complete Compose API/PDF/SMTP-fixture/export/
   local-Restic/isolated-restore/browser/axe/deployment-evidence/cleanup flow
-  passed on the completed implementation working tree. A clean-head run is the
-  remaining local evidence step after the documentation commit.
+  passed from clean commit
+  `a711d06456c45cf10f33cf28aebdb1e7e1287f8f`. The run left no disposable
+  containers, volumes, or networks. Exact results are in
+  `docs/PILOT_BASELINE.md`.
 - **Tested in CI:** pending the pilot Draft PR.
 - **Tested on API-35 emulator:** prepared but pending the pilot PR workflow.
 - **Tested with real SMTP:** no; external gate.
