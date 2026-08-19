@@ -6,8 +6,8 @@ idea record; the pilot feature freeze forbids implementation from that file.
 ## Now
 
 - [ ] Review the Draft PR without merging it. Treat every failed or absent
-  required check as a stop condition; record API-35 emulator evidence separately
-  from JVM/APK assembly.
+  required check as a stop condition. All six automated checks, including the
+  separate API-35 emulator job, are green in run `32207844740`.
 
 ## Single next real action after review
 
@@ -54,3 +54,5 @@ idea record; the pilot feature freeze forbids implementation from that file.
   scenario using unmistakably synthetic data.
 - [x] Run the unchanged `make full-check` from a clean implementation commit
   and record all synthetic acceptance and cleanup evidence.
+- [x] Pass all six Draft-PR CI jobs at the final code-bearing commit, including
+  the full API-35 emulator pilot scenario and its cleanup.

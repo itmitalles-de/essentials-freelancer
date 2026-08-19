@@ -56,24 +56,42 @@ categories and must never be inferred from this run.
 
 ## Post-hardening clean-head acceptance
 
-The unchanged `make full-check` entry point was run again from a clean pilot
-branch after the implementation commits. It completed at
-`2026-08-19T00:16:19Z` against commit
-`a711d06456c45cf10f33cf28aebdb1e7e1287f8f`, using the toolchain recorded
-above. No assertion or verification layer was weakened or skipped.
+The unchanged `make full-check` entry point was first run from the clean pilot
+implementation commit `a711d06456c45cf10f33cf28aebdb1e7e1287f8f` and
+completed at `2026-08-19T00:16:19Z`. It was repeated after the Android CI fixes
+from the final code-bearing commit
+`9da1efaa7889ff53ef37dcf8a512921335ffc4c9` and completed at
+`2026-08-19T02:20:35Z`, using the toolchain recorded above. The table records
+the final repeat. No assertion or verification layer was weakened or skipped.
 
 | Layer | Clean-head result |
 |---|---|
 | Backend | Pass: 48 pytest tests; `pip-audit` reported no known vulnerabilities. |
 | Frontend | Pass: 8 Vitest files / 9 tests, production build, and `npm audit` with 0 vulnerabilities. |
-| Android local | Pass: 3 JVM tests plus debug app and instrumentation APK assembly. API-35 emulator execution remains separate CI evidence. |
+| Android local | Pass: 3 JVM tests plus debug app and instrumentation APK assembly. API-35 emulator execution is recorded separately below. |
 | API/PDF/SMTP fixture | Pass: explicit initial send and resend, idempotent replay without a duplicate, attachment/content checks, and rejection/timeout/disconnect failure-state checks. Authentication and partial-configuration cases passed in the backend suite. |
 | Playwright and axe | Pass: 2 source scenarios plus the same 2 restored-stack scenarios; 16 light/dark axe analyses reported no serious or critical violation. |
 | Export and deployment evidence | Pass: complete business export plus mode-0600 redacted JSON/Markdown deployment evidence and structural secret-redaction checks. |
-| Restic and isolated restore | Pass: one encrypted local snapshot (`sha256:664fa4bd0dbb`), repository check, retention evaluation, restore into new volumes, database/document/revision comparison, API/browser checks. |
+| Restic and isolated restore | Pass: one encrypted local snapshot (`sha256:95fd65932ef4`), repository check, retention evaluation, restore into new volumes, database/document/revision comparison, API/browser checks. |
 | Supply-chain evidence | Pass: SHA/digest policy checks, history-aware secret scan, dependency audits, and CycloneDX SBOM generation with 710 components. |
 | Cleanup | Pass: a post-run inventory found no run-specific `freelancer-fc-*` containers, volumes, or networks. |
 
 This remains synthetic local evidence. No real SMTP account, real offsite
 repository, authorized deployment target, public proxy/TLS path, production
 data, or customer address was exercised.
+
+## GitHub CI and API-35 evidence
+
+Draft PR #3 run
+[`32207844740`](https://github.com/itmitalles-de/essentials-freelancer/actions/runs/32207844740)
+tested code-bearing commit `9da1efaa7889ff53ef37dcf8a512921335ffc4c9`
+on 2026-08-19. All six jobs passed: backend, frontend,
+compose/static/security, Android JVM/APK, the unchanged full check, and the
+dedicated API-35 emulator smoke. The emulator booted with KVM and completed
+login against the synthetic stack, protected client and invoice reads, timer
+start/stop, PDF open/download, deliberate paid transition, Activity recreation,
+and cleanup.
+
+This is CI evidence against generated data, not a production claim. The run did
+not use a real SMTP provider, real offsite repository, authorized deployment
+target, customer address, production document, or release-signing key.

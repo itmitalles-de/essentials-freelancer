@@ -19,8 +19,8 @@ compatibility identifiers. See `docs/COMPATIBILITY_IDENTIFIERS.md`.
 - Starting/default revision: `master` / `origin/master` at
   `10ce63ca50c9fdd83e06f570dcc2acd41394afb5`.
 - Active branch: `pilot/freelancer-first-internal-use`.
-- No matching active branch or Draft PR existed at start. No PR is merged by
-  this workstream.
+- No matching active branch or Draft PR existed at start. Draft PR #3 is now
+  open for review and remains unmerged.
 - Initial unchanged `make full-check` passed; exact tools/results are recorded
   in `docs/PILOT_BASELINE.md`.
 - No production data, receipt, PDF, credential, SMTP account, offsite target,
@@ -65,11 +65,16 @@ compatibility identifiers. See `docs/COMPATIBILITY_IDENTIFIERS.md`.
   JVM (3) and APK assembly checks; complete Compose API/PDF/SMTP-fixture/export/
   local-Restic/isolated-restore/browser/axe/deployment-evidence/cleanup flow
   passed from clean commit
-  `a711d06456c45cf10f33cf28aebdb1e7e1287f8f`. The run left no disposable
-  containers, volumes, or networks. Exact results are in
+  `9da1efaa7889ff53ef37dcf8a512921335ffc4c9`. The final unchanged
+  `make full-check` repeat left no disposable containers, volumes, or networks.
+  Exact results are in
   `docs/PILOT_BASELINE.md`.
-- **Tested in CI:** pending the pilot Draft PR.
-- **Tested on API-35 emulator:** prepared but pending the pilot PR workflow.
+- **Tested in CI:** yes; Draft PR #3 run `32207844740` passed all six jobs at
+  the final code-bearing commit, including the unchanged full check.
+- **Tested on API-35 emulator:** yes; the dedicated CI job booted an API-35
+  emulator and passed login, protected lists, timer start/stop, PDF
+  open/download, deliberate paid transition, Activity recreation, and cleanup
+  against the synthetic stack.
 - **Tested with real SMTP:** no; external gate.
 - **Tested with a real offsite target:** no; external gate.
 - **Productively deployed:** no evidence; external gate.
