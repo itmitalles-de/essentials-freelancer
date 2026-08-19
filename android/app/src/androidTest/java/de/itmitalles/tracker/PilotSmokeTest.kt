@@ -58,6 +58,7 @@ class PilotSmokeTest {
         compose.waitUntilAtLeastOneExists(hasText("TESTKUNDE", substring = true), 20_000)
 
         compose.onNodeWithText("Kunde wählen…").performClick()
+        compose.waitUntilAtLeastOneExists(hasText("TESTKUNDE"), 5_000)
         compose.onNodeWithText("TESTKUNDE").performClick()
         compose.onNodeWithText("Beschreibung").performTextInput("ANDROID STATE RESTORE")
         compose.activityRule.scenario.recreate()
