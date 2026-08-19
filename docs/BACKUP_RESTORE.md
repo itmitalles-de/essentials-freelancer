@@ -1,81 +1,76 @@
 # Business-data backup and restore
 
-The authoritative business state consists of two parts and is incomplete if
-either part is missing:
+Status on 2026-08-19: the repository-local procedure is synthetically verified; an approved encrypted remote target, protected credentials, real snapshot, and isolated real-target restore were **not provided** and remain an external gate. No cloud resource was created.
 
-- the PostgreSQL database in the existing `tracker_db_data` volume;
-- invoice PDFs, quote PDFs, logos, and expense receipts in the existing
-  `tracker_invoices` volume.
+## Complete recovery unit
 
-`scripts/export-business-data.sh` briefly stops only the backend writer, takes a
-PostgreSQL custom-format dump, archives `/data/invoices`, validates both
-archives, writes checksums and a revision manifest, then restores the previous
-service state. It deliberately excludes `.env` and every credential. The
-default destination is the ignored local `backups/` directory. That directory
-contains business data and must never be committed.
+A backup is incomplete unless it contains both:
 
-## Export and offsite handling
+- the PostgreSQL database in the compatibility volume `tracker_db_data`;
+- every invoice PDF, quote PDF, logo, and expense receipt in `tracker_invoices` (`/data/invoices`).
 
-Run the export from the deployment checkout with the production `.env`
-present. Move the resulting timestamped directory to encrypted offsite storage
-using the organization's approved backup tool. Encryption keys and the `.env`
-belong in separate protected secret management, not inside this export or Git.
+`scripts/export-business-data.sh` stops only the backend writer, waits for database health, creates a PostgreSQL custom-format dump and complete document archive, validates both, writes SHA-256 checksums and a revision manifest, and restores the prior service state. It excludes `.env` and credentials. The ignored local `backups/` directory contains business data and must never enter Git.
 
-`scripts/offsite-backup.sh` combines the consistent export with an encrypted
-restic snapshot, repository verification, retention, and pruning. It reads
-paths and the repository URL from `/etc/freelancer-backup.env`; credentials
-remain in the referenced mode-0600 restic password and rclone configuration
-files. Provider selection, account provisioning, and real remote evidence stay
-deployment-specific.
+## Pilot recovery policy
 
-Once migration `0003_modules` is present, export and offsite scripts enforce
-the persisted module states. `export.business_data` must be enabled; an offsite
-run additionally requires `backup.offsite`. Deactivation therefore prevents
-new host jobs without deleting previous exports, snapshots, or business data.
-Databases predating the module table remain exportable so a safety export can
-still precede migration.
-The environment file itself must also be mode 0600 and owned by the service
-user declared in `freelancer-backup.service`.
+The following values are the first-pilot operating contract; the designated operator must confirm them before enabling the timer:
 
-The deployment includes a daily systemd service/timer and an environment-file
-example in `deploy/`. Before enabling the timer, initialize the restic
-repository, run the service manually, verify the remote snapshot, and complete
-an empty-target restore rehearsal. A successful timer status alone is not a
-restore test.
+- **RPO:** at most 24 hours (one successful complete encrypted snapshot per day).
+- **RTO:** four hours from declared restore start to verified application access, subject to remote bandwidth.
+- **Retention:** 7 daily, 5 weekly, and 12 monthly snapshots after explicit approval.
+- **Responsible role:** the designated single pilot operator; a named substitute must be recorded outside Git.
+- **Restore rhythm:** one isolated restore every month and after any material migration/backup-tool change; an untested scheduled job does not satisfy this.
+
+These are operational targets, not proof. Actual measured snapshot age and restore duration must be recorded outside Git.
+
+## Safe offsite acceptance
+
+Credentials and repository URLs live only in `/etc/freelancer-backup.env` and referenced mode-0600 restic/rclone files. Use `deploy/freelancer-backup.env.example` as the configuration contract; never fill it in inside the repository.
+
+1. Confirm authorization for the exact remote target and operator.
+2. Inventory the existing repository read-only with `scripts/offsite-backup.sh --inventory-only`. It emits only snapshot count, time, and a redacted snapshot-ID hash; it creates/deletes nothing and changes no retention.
+3. Confirm no unrelated repository or retention policy is being targeted.
+4. Enable the existing `backup.offsite` module only after configuration readiness is truthful.
+5. Run `scripts/offsite-backup.sh`. It creates a consistent export, uploads the timestamped complete export encrypted, runs `restic check`, and reports a redacted snapshot-ID hash.
+6. `RESTIC_APPLY_RETENTION=false` is the safe default. Do not change existing retention during first acceptance. Set it to `true` only after the documented policy is independently approved.
+7. If `BACKUP_EVIDENCE_FILE` points outside Git, the script writes a mode-protected machine-readable record containing the snapshot ID, UTC completion, repository-check outcome, and whether retention ran. It contains no repository URL or credential.
+8. Restore the exact snapshot into a new isolated Compose project and new `tracker_*` volumes. Never target the source volumes.
+9. Compare every business/evidence-table count, sorted document SHA-256 inventory, schema revision, and application/repository revision.
+10. Record measured RPO/RTO and deviations, then remove only the isolated test installation. Leave the source and remote snapshot untouched.
+
+The daily systemd unit/timer in `deploy/` must remain disabled until the first real snapshot and isolated restore pass. A successful timer status alone is not recovery evidence.
 
 ## Restore rehearsal
 
-Restore only on disposable infrastructure with a new Compose project name and
-therefore new `tracker_*` volumes. Supply a fresh local `.env` with the same
-database name/user and appropriate test-only credentials. Start only `db`, then
-run `scripts/restore-business-data.sh <export-directory> --confirm-empty-target`.
+Prepare a new Compose project with fresh credentials and volumes. Start only `db`, then invoke `scripts/restore-business-data.sh <export-directory> --confirm-empty-target`.
 
-The restore script refuses a running backend, a non-empty database, a non-empty
-documents volume, or a checksum mismatch. Database readiness uses deadline
-polling (180 seconds by default, configurable through
-`DATABASE_READY_TIMEOUT_SECONDS`) rather than an assumed startup delay. The
-script does not start application traffic afterward. Review the output, start
-`backend` and `frontend`, verify `/api/ready`, log in, and execute the customer
-→ project → time → invoice → PDF smoke flow. Confirm quote conversion and at
-least one receipt download as well.
+The restore script refuses a running backend, non-empty database, non-empty document volume, or checksum mismatch. It uses health/deadline checks rather than assumed startup sleeps and does not start application traffic after restoration. Then:
 
-`make full-check` automates this rehearsal with generated data, a temporary
-encrypted local restic repository, and a separately named empty Compose target.
-It validates checksums, manifest revision, database counts, APIs, documents, and
-browser views after restore. This proves the repository-local procedure only;
-it is not evidence for a real remote provider or production host.
+1. review restore output;
+2. start backend/frontend;
+3. verify `/api/ready` and `/api/meta` against the intended SHA/schema/build;
+4. collect JSON/Markdown deployment evidence;
+5. log in and exercise customer → project → time → quote → invoice → PDF plus one receipt;
+6. compare all database counts, including `invoice_send_attempts`;
+7. compare sorted document SHA-256 inventories and export `SHA256SUMS`;
+8. write a protected restore-evidence JSON outside Git.
 
-For a real disaster recovery, use the repository revision recorded in
-`MANIFEST.txt` first. Upgrade only after that revision is healthy. A migration
-rollback is not a substitute for restoring the pre-migration export.
+The optional restore-evidence file consumed by `collect-deployment-state.py` has only this allowlist:
 
-## Migration rollback boundary
+```json
+{
+  "completed_at_utc": "UTC timestamp",
+  "source_repository_commit": "40-character commit",
+  "target_repository_commit": "40-character commit",
+  "database_counts_match": true,
+  "document_hashes_match": true,
+  "isolated_target": true,
+  "result": "passed"
+}
+```
 
-Migrations `0002` through `0005` are additive and preserve legacy tables, rows,
-invoice numbers, database names, and volume names. Their downgrades can remove
-newer module, assistant, project/quote, constraint, or idempotency state and are
-therefore destructive by definition. Use them only on disposable rehearsal
-infrastructure or after taking and verifying a full export. Production rollback
-means restoring that export. Migration `0001_existing_mvp` deliberately refuses
-downgrade because it may be a baseline over a pre-Alembic database and must
-never drop legacy business data.
+`make full-check` automates the same shape using generated data, a temporary encrypted local restic repository, and a separate empty target. It verifies checksums, revision, tables/APIs/documents/browser views, and cleanup. A local restic repository is not a real offsite result.
+
+## Rollback boundary
+
+Migrations `0002` through `0006` preserve compatibility IDs and existing business documents on upgrade. `0006_pilot_safety` adds invoice-send evidence and clears only the exact known footer sentence formerly injected automatically; custom footer text is retained. Downgrades can discard newer state and are not production rollback. Restore the complete database/document export at the revision in `MANIFEST.txt`; upgrade only after that revision is healthy. The legacy baseline refuses destructive downgrade.

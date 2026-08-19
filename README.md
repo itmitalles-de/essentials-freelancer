@@ -27,7 +27,8 @@ The controlled first-internal-use boundary and its exit criteria are frozen in
   packages, templates, transparent Decimal calculations, immutable snapshots,
   and mandatory human approval;
 - invoices generated from unbilled time or an accepted quote, with PDF,
-  SMTP delivery, and controlled draft/sent/paid/cancelled states;
+  explicit tax selection, review-gated/idempotent SMTP delivery, redacted send
+  evidence, and controlled draft/sent/paid/cancelled states;
 - expenses with PNG, JPEG, or PDF receipts up to 5 MiB;
 - company settings, logo, numbering prefixes, and a configurable invoice
   footer;
@@ -40,9 +41,11 @@ The controlled first-internal-use boundary and its exit criteria are frozen in
   status handling;
 - consistent PostgreSQL/document export and empty-target restore tooling.
 
-The default invoice footer retains the deployment's existing small-business
-wording. It is configurable and is not tax or legal advice; operators are
-responsible for validating their own invoice requirements.
+The application does not infer tax status. A fresh installation has a blank
+invoice footer and requires explicit tax rates. Migration `0006` removes only
+the exact formerly generated small-business sentence while preserving custom
+operator text. Defaults and checklists are not tax or legal advice; see
+[`docs/operations/INVOICE_OPERATOR_CHECKLIST.md`](docs/operations/INVOICE_OPERATOR_CHECKLIST.md).
 
 ## Architecture and persistence
 
@@ -67,7 +70,7 @@ backup must contain both.
 
 ```bash
 cp .env.example .env
-# Replace every change-me value with a strong local secret.
+# Replace every change-me secret and every replace-with provenance placeholder.
 docker network inspect proxy_net >/dev/null 2>&1 || docker network create proxy_net
 docker compose up -d --build
 ```
@@ -82,12 +85,16 @@ The backend runs additive Alembic migrations before accepting traffic. Migration
 legacy schema only for a new empty database. Later migrations add projects and
 quotes (`0002`), module state/audit data (`0003`), versioned quote-assistant
 snapshots (`0004`), and operational constraints, indexes, and idempotency keys
-(`0005`) without renaming legacy compatibility objects. Take a verified
+(`0005`). Pilot safety migration `0006` adds invoice-send attempt evidence and
+removes the known inferred tax footer without renaming compatibility objects. Take a verified
 business-data export before deploying a migration.
 
 SMTP is optional. Without `SMTP_HOST` and `SMTP_FROM`, invoice creation and PDF
 download remain available while the send endpoint returns a clear configuration
-error and leaves the invoice in draft state.
+error and leaves the invoice in draft state. Sending requires the PDF to be
+opened first and a separate accessible confirmation of recipient, invoice
+number, amount, external delivery, and review. First send and resend are
+distinct idempotent actions; payment is always a separate deliberate action.
 
 ## Backup and restore
 
@@ -101,7 +108,25 @@ Local exports are written below ignored `backups/` by default. They contain
 business data and must not be committed. Offsite encryption, retention, and
 credential management use the explicitly configured restic/rclone target. The
 optional systemd service and timer in `deploy/` run the same verified export
-before creating and checking an encrypted offsite snapshot.
+before creating and checking an encrypted offsite snapshot. Retention/pruning
+is opt-in; read-only inventory and the pilot RPO/RTO/restore cadence are defined
+in the recovery guide.
+
+## Pilot operations
+
+- [`docs/PILOT_RUNBOOK.md`](docs/PILOT_RUNBOOK.md) is the controlled 22-step
+  synthetic and first-use flow.
+- [`docs/operations/SMTP_ACCEPTANCE.md`](docs/operations/SMTP_ACCEPTANCE.md)
+  separates the local fixture from the externally gated real-provider test.
+- `scripts/collect-deployment-state.sh` writes secret-safe JSON and Markdown
+  evidence for the checkout, redacted Compose model, images, containers,
+  volumes, schema/application metadata, backup age, restore evidence, and an
+  explicitly authorized proxy/TLS endpoint. It never emits Compose environment
+  values.
+- `make pilot-sbom` generates a CycloneDX SBOM from Python pins, npm lock
+  integrity, Gradle verification metadata, image digests, and action SHAs.
+- [`docs/GITHUB_REPOSITORY_SETTINGS.md`](docs/GITHUB_REPOSITORY_SETTINGS.md)
+  records observed governance and the external branch-protection plan gate.
 
 ## Reproducible verification
 
@@ -113,8 +138,9 @@ make full-check
 
 It creates random synthetic credentials, Compose project names, ports, volumes,
 and an isolated proxy network. It runs backend and migration tests, frontend
-tests/build/audit, Android JVM tests/debug assembly, Compose/static/secret
-checks, the complete API/PDF/SMTP flow, Playwright navigation and axe checks,
+tests/build/audit, Android JVM tests and app/instrumentation APK assembly,
+Python/npm dependency audits, Compose/static/full-history secret checks, SBOM
+and deployment-evidence checks, the complete API/PDF/SMTP flow, Playwright navigation and axe checks,
 business export, an encrypted local restic snapshot, and restore into a second
 empty Compose installation. Database counts, document checksums, schema and
 repository revisions, restored APIs, and restored browser views are compared.
@@ -125,7 +151,13 @@ Required host tools are Docker with Compose, Bash, Python 3, Node.js/npm, JDK 17
 plus an Android SDK, `restic`, `pdftotext`, and Chrome/Chromium. CI runs this
 same target in addition to the focused jobs.
 
+CI also runs the committed instrumentation smoke on an API-35 emulator against
+an isolated stack containing only `TESTKUNDE`, `TESTPROJEKT`, `TESTANGEBOT`,
+`TESTRECHNUNG`, and `NICHT BUCHEN`. Release signing is intentionally external.
+
 SMTP and offsite storage in `make full-check` are local simulators. A green run
 does not prove delivery by a real SMTP provider, recoverability from a real
 remote restic target, public proxy/DNS/TLS, or the revision deployed in
 production. See [`docs/VERIFICATION_MATRIX.md`](docs/VERIFICATION_MATRIX.md).
+The current truth for the pilot is recorded without promotion claims in
+[`docs/PILOT_BASELINE.md`](docs/PILOT_BASELINE.md).

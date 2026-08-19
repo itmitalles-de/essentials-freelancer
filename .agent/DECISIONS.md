@@ -116,3 +116,50 @@ simulators as production verification were rejected.
 `docs/VERIFICATION_MATRIX.md` records evidence boundaries, and external-only
 requirements remain `Blocked` in `.agent/TODO.md` rather than becoming
 nice-to-have ideas.
+
+## 2026-08-19 - Freeze features for the first internal pilot
+
+**Decision:** The pilot is limited to the existing single-administrator
+customer/project/time/quote/invoice/expense/report/export/restore workflow.
+Every new idea is recorded only in `docs/NICE_TO_HAVE.md`; no stub API, table,
+feature flag, or disabled UI is created for it.
+
+**Reason:** Additional surface area is currently a larger pilot risk than a
+missing feature.
+
+**Consequences:** Work may improve safety, evidence, or an existing pilot flow,
+but may not introduce multi-user/SaaS, commerce, tax-automation, AI/OCR,
+payments, portal, Kubernetes, or other-module scope. The deterministic quote
+assistant remains versioned, traceable, and human-approved.
+
+## 2026-08-19 - Make invoice tax and external delivery operator decisions
+
+**Decision:** The application never infers tax status or injects a tax-law
+statement on a fresh installation. Time invoices and quote lines require an
+explicit tax rate. External delivery requires the operator to open the PDF,
+confirm recipient/number/amount and an external-email warning, then use a
+unique idempotency key; resends are separately explicit and auditable.
+
+**Reason:** A syntactically valid PDF or configured SMTP connection does not
+establish legal correctness, operator intent, or safe delivery.
+
+**Consequences:** SMTP may be absent without blocking drafts/PDFs. Success sets
+`sent` but never `paid`; failures preserve the prior invoice state. Send
+attempts store safe operational evidence, successful-key replay performs no
+second SMTP call, and full message identifiers/secrets are never exposed.
+
+## 2026-08-19 - Treat deployment and external-service claims as evidence gates
+
+**Decision:** Desired Compose/configuration is not deployed-state evidence. A
+read-only inspector collects secret-redacted JSON/Markdown for revision, dirty
+state, images, health, volumes, schema, app metadata, backup/restore evidence,
+and explicitly authorized proxy/TLS observations. Real SMTP and real offsite
+status close only through their dedicated operator acceptance procedures.
+
+**Reason:** CI and local fixtures cannot prove which code/data runs elsewhere,
+provider delivery, remote durability, or recovery from a remote target.
+
+**Consequences:** Missing access or credentials remains an external gate, not a
+reason to invent configuration or infrastructure. Backup retention is dry-run
+by default, restoration uses different empty volumes, and evidence language
+must distinguish implemented/local/CI/emulator/real-external/deployed/unknown.

@@ -1,130 +1,110 @@
-# Current State
+# Current state
 
-## Product boundary
+## Pilot boundary
 
-Essentials+ Freelancer is a focused single-installation product for exactly one
-administrator. It manages clients, projects, time, quotes, invoices, expenses,
-operational reports, and complete business-data recovery. It is not a
-multi-tenant service, team system, shop, inventory tool, or groupware suite.
+Essentials+ Freelancer remains one installation for exactly one administrator.
+Its pilot scope is clients, projects, time, quotes, invoice drafts, expenses,
+CSV reports, and complete backup/restore. The feature freeze and hard non-goals
+are authoritative in `docs/PILOT_SCOPE.md`; new ideas go only to
+`docs/NICE_TO_HAVE.md` and receive no stubs or dormant schema/UI.
 
-The legacy PostgreSQL database/user `tracker`, volumes `tracker_db_data` and
-`tracker_invoices`, browser storage keys, and Android package
-`de.itmitalles.tracker` remain compatibility identifiers. Visible branding is
-`Essentials+ Freelancer`.
+Visible product/repository naming is `Essentials+ Freelancer` and
+`itmitalles-de/essentials-freelancer`. PostgreSQL database/user `tracker`,
+volumes `tracker_db_data`/`tracker_invoices`, browser storage keys, Android
+package `de.itmitalles.tracker`, and migration names remain deliberate
+compatibility identifiers. See `docs/COMPATIBILITY_IDENTIFIERS.md`.
 
-## Baseline and workstream
+## Workstream
 
-- Baseline/default branch at work start: `master` at
-  `31421a8b6a56f19dc4b45bb75ff3cf548544c809` (agent-context documentation),
-  based on product stabilization merge `ed28b555cd6e521fd96eb19ab6e2100f90d1e63f`
-  (PR #1, 2026-08-13).
-- Baseline evidence: the existing focused backend, frontend, Compose/static and
-  Android checks were green locally and in the GitHub CI run for that revision.
-- No open issue or pull request existed when this workstream started.
-- Active implementation branch: `agent/essentials-freelancer-autonomous`.
-- Production data, `.env`, backups, receipts, PDFs, and production accounts were
-  deliberately not read.
+- Starting/default revision: `master` / `origin/master` at
+  `10ce63ca50c9fdd83e06f570dcc2acd41394afb5`.
+- Active branch: `pilot/freelancer-first-internal-use`.
+- No matching active branch or Draft PR existed at start. No PR is merged by
+  this workstream.
+- Initial unchanged `make full-check` passed; exact tools/results are recorded
+  in `docs/PILOT_BASELINE.md`.
+- No production data, receipt, PDF, credential, SMTP account, offsite target,
+  deployment host, or signing key was supplied or read.
 
-## Implemented on the active branch
+## Implemented pilot controls
 
-- Repository-local Essentials+ module manifests with stable IDs, manifest
-  schema versions, product/schema compatibility, type/group/required/default
-  state, dependencies/conflicts, configuration and secret requirements,
-  API/navigation/job boundaries, health, data ownership, and lifecycle/export/
-  backup/restore behavior.
-- Persisted module states `not_installed`, `needs_configuration`, `disabled`,
-  `enabled`, and `degraded`; server-side route guards; dependency enforcement;
-  idempotent audited state changes; data-preserving deactivation; navigation
-  guards; grouped Admin Center; secret-status-only API responses; and host job
-  enforcement for export/offsite backup.
-- Optional deterministic quote assistant with versioned service/material/travel
-  prices, units, validity, taxes, packages, templates, guided inputs, complete
-  Decimal calculation steps, surcharge/discount/tax breakdown, immutable
-  snapshots, explicit approval, and one-time transfer into the existing quote
-  model. It has no AI/provider/OCR/GAEB/procurement behavior.
-- Operational reporting by period/client/project/category for captured and
-  unbilled time, quote conversion, invoice states/open/paid amounts, and
-  expenses, with matching filtered CSV exports and no tax/legal conclusions.
-- Operational hardening: additive constraints/indexes, idempotency keys for
-  timer/invoice/assistant commands, global timer concurrency handling,
-  pagination/filtering, structured errors, liveness/readiness/meta endpoints,
-  request IDs/security headers, route-template logs without bodies/query data,
-  login/SMTP rate limits, and signature-aware PNG/JPEG/PDF validation.
-- Visible web/Android/dashboard/API branding is Essentials+ Freelancer while
-  legacy persistence/package identifiers remain unchanged.
-- `make full-check` builds random disposable source and restore stacks, uses
-  generated secrets/data, runs every focused suite/build/static check, exercises
-  API/PDF/SMTP and Playwright/axe flows, creates/verifies an encrypted local
-  restic snapshot, restores into an empty target, compares database counts,
-  checksums and revisions, and cleans stacks/volumes/networks/images/artifacts.
-- CI retains focused jobs and adds the same full acceptance target; Android CI
-  now runs the committed JVM test before debug assembly.
+- Pilot scope/freeze, compatibility-name boundary, 22-step runbook, invoice
+  operator checklist, SMTP acceptance gate, backup/restore contract, GitHub
+  settings evidence, and verification matrix.
+- Explicit invoice/quote tax input; blank fresh-install tax footer; migration
+  `0006_pilot_safety` removes only the exact legacy generated footer while
+  preserving custom text.
+- Time-invoice visible quantities are rounded first with Decimal/ROUND_HALF_UP;
+  line totals derive from that same printed quantity. Invoice number allocation
+  is tested concurrently on PostgreSQL.
+- Invoice delivery requires a previously opened PDF plus an accessible
+  confirmation containing recipient, invoice number, amount, and external-mail
+  warning. SMTP remains optional; first send and resend are deliberate and use
+  required idempotency keys. Redacted send-attempt evidence records success or
+  safe failure without changing a draft/sent invoice incorrectly.
+- `/api/meta` exposes only product version, repository revision, schema version,
+  build time, and readiness. `/api/ready` is the Compose health gate.
+- `scripts/collect-deployment-state.sh` performs a read-only, secret-redacted
+  runtime inspection and emits mode-0600 JSON plus Markdown.
+- Complete export still treats PostgreSQL and the document volume as one unit.
+  Offsite retention is dry-run by default; inventory, encrypted upload, check,
+  redacted snapshot evidence, and isolated restore are documented.
+- Android login no longer poisons the authenticated Retrofit cache. A debug-only
+  API-35 instrumentation flow covers login, timer/list actions, client/invoice
+  views, PDF open/download, deliberate paid status, and Activity recreation
+  against exact synthetic seed objects.
+- External GitHub Actions use reviewed commit SHAs; container bases use image
+  digests; Gradle verifies dependencies and wrapper distribution; Python/npm
+  audits, a history-aware secret scan, CODEOWNERS, and a CycloneDX pilot SBOM
+  are part of repository/CI checks.
 
-## Schema and data compatibility
+## Evidence status
 
-- `0001_existing_mvp`: safe legacy baseline/new-database schema.
-- `0002_projects_quotes`: projects, quotes, line items, and source links.
-- `0003_modules`: module installations and audit events.
-- `0004_quote_assistant`: catalog/package/template versions and immutable draft
-  snapshots.
-- `0005_operational_hardening`: idempotency columns/uniques, reporting indexes,
-  timer uniqueness, and business constraints.
+- **Implemented:** all controls above.
+- **Synthetically tested locally:** focused backend (48), frontend (9), Android
+  JVM (3) and APK assembly checks; complete Compose API/PDF/SMTP-fixture/export/
+  local-Restic/isolated-restore/browser/axe/deployment-evidence/cleanup flow
+  passed on the completed implementation working tree. A clean-head run is the
+  remaining local evidence step after the documentation commit.
+- **Tested in CI:** pending the pilot Draft PR.
+- **Tested on API-35 emulator:** prepared but pending the pilot PR workflow.
+- **Tested with real SMTP:** no; external gate.
+- **Tested with a real offsite target:** no; external gate.
+- **Productively deployed:** no evidence; external gate.
+- **Unknown:** actual target revision/images/volumes/backup age/proxy/TLS and
+  authorized real-data behavior.
 
-All new migrations are additive on upgrade. Existing business data and legacy
-names are preserved. Downgrades of post-baseline migrations can discard newer
-state and are not the production rollback mechanism; use a verified complete
-database/document restore.
+Python runtime requirements are directly pinned and the resolved environment is
+audited during each build, but transitive packages are not hash-locked. The
+pilot therefore treats a reviewed image ID/digest as the deployable artifact and
+does not infer that a later rebuild is byte-identical. Gradle verification is an
+integrity control, not a vulnerability-feed result.
 
-## Automated evidence
+## Schema and recovery
 
-The final handoff revision passes `make full-check` with:
+Migrations `0001` through `0005` retain the established product/module schema.
+`0006_pilot_safety` adds `invoice_send_attempts` and performs the narrow footer
+cleanup above. All compatibility IDs and existing business documents remain.
+Production rollback is a verified full database/document restore, never a
+destructive legacy-baseline downgrade.
 
-- 36 backend tests and migration/schema regression;
-- 8 frontend tests, TypeScript production build, and zero moderate-or-higher
-  npm audit findings;
-- Android JVM unit test and debug APK assembly;
-- Compose configuration, shell syntax, ShellCheck, Python compile, and tracked
-  secret scan;
-- complete generated API flow, machine-readable quote/invoice PDF assertions,
-  SMTP success/repeat/reject/timeout/disconnect behavior, and failed-send state
-  preservation;
-- Playwright authenticated navigation/restored-data checks and serious/critical
-  axe scans;
-- business export, checksums/revision manifest, local encrypted restic check and
-  restore, empty-target application restore, and source/target count/API/browser
-  comparison.
+## External gates
 
-The local SMTP fixture and local restic repository are simulators, not external
-production proof. The detailed boundary is in `docs/VERIFICATION_MATRIX.md`.
-
-## External unknowns
-
-- The actual production revision, health, volume state, public proxy/DNS/TLS,
-  and deployment configuration were not inspected.
-- Real SMTP authentication, provider acceptance, routing, reputation, spam
-  handling, and recipient delivery are unproved.
-- No real remote restic/rclone/S3 provider, retention policy, credential path,
-  scheduled service, or remote restore has been verified.
-- Android device/emulator behavior and release signing are not covered by the
-  JVM/build checks.
-
-## Relevant commits
-
-- `a1464f8` — Essentials+ module contract and Admin Center.
-- `d93d997` — deterministic versioned quote assistant.
-- `59245b0` — operational reporting and hardening.
-- `d9fc645` — disposable full product acceptance and CI integration.
-
-See the active branch log and Draft PR for subsequent acceptance/documentation
-commits and CI status.
+- authorized deployment target access for inspector, revision, volume, proxy
+  and TLS evidence;
+- approved SMTP test account and operator-controlled recipient;
+- approved encrypted Restic/rclone target and protected credentials, followed
+  by an isolated real restore;
+- Android release-signing authority (not needed for the debug pilot smoke);
+- GitHub branch-protection/ruleset capability: current private-repository plan
+  returned HTTP 403, so the Draft PR/manual review gate is compensating control.
 
 ## Primary references
 
-- `README.md`: product scope, compatibility, setup, and full-check entry point.
-- `docs/VERIFICATION_MATRIX.md`: evidence by test layer and external gaps.
-- `docs/BACKUP_RESTORE.md`: complete recovery unit and restore procedure.
-- `docs/NICE_TO_HAVE.md`: deferred ideas only; not an active backlog.
-- `backend/app/module_registry.py`: module contract source of truth.
-- `backend/migrations/versions/`: additive schema history.
-- `scripts/full-check.sh`: disposable acceptance orchestration.
-- `.agent/TODO.md`: only actionable continuation and externally blocked work.
+- `docs/PILOT_SCOPE.md` and `docs/PILOT_RUNBOOK.md`
+- `docs/PILOT_BASELINE.md` and `docs/VERIFICATION_MATRIX.md`
+- `docs/operations/INVOICE_OPERATOR_CHECKLIST.md`
+- `docs/operations/SMTP_ACCEPTANCE.md`
+- `docs/BACKUP_RESTORE.md`
+- `docs/GITHUB_REPOSITORY_SETTINGS.md`
+- `.agent/TODO.md`
