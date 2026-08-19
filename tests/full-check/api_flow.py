@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import base64
+import concurrent.futures
 import json
 import os
 import re
@@ -147,10 +148,12 @@ def verify_pdf(content: bytes, path: str, expected_terms: list[str]) -> None:
 
 def verify_core(api: Api, revision: str, *, backup_state: str) -> None:
     ready = api.request("GET", "/api/ready")
-    expect(ready["schema_revision"] == "0005_operational_hardening", "schema mismatch")
+    expect(ready["schema_revision"] == "0006_pilot_safety", "schema mismatch")
     meta = api.request("GET", "/api/meta")
     expect(meta["product"] == "Essentials+ Freelancer", "product metadata mismatch")
     expect(meta["repository_revision"] == revision, "repository revision mismatch")
+    expect(meta["build_time"] != "unknown", "build time was not embedded")
+    expect(meta["readiness"] == "ready", "metadata readiness mismatch")
     clients = api.request("GET", "/api/clients?q=Synthetic%20Full%20Check")
     expect(len(clients) == 1, "restored client not unique/present")
     projects = api.request("GET", f"/api/projects?client_id={clients[0]['id']}")
@@ -160,6 +163,19 @@ def verify_core(api: Api, revision: str, *, backup_state: str) -> None:
     for invoice in invoices:
         document, _ = api.request("GET", f"/api/invoices/{invoice['id']}/pdf", raw=True)
         expect(document.startswith(b"%PDF-"), "restored invoice PDF is unavailable")
+    paid_invoice = next(item for item in invoices if item["status"] == "paid")
+    send_attempts = api.request(
+        "GET", f"/api/invoices/{paid_invoice['id']}/send-attempts"
+    )
+    expect(
+        [(item["is_resend"], item["outcome"]) for item in send_attempts]
+        == [(False, "sent"), (True, "sent")],
+        "invoice send history differs",
+    )
+    expect(
+        all(item["message_id_redacted"].startswith("sha256:") for item in send_attempts),
+        "redacted SMTP evidence is missing",
+    )
     quotes = api.request("GET", f"/api/quotes?client_id={clients[0]['id']}")
     expect(
         len(quotes) == 2
@@ -202,6 +218,29 @@ def verify_core(api: Api, revision: str, *, backup_state: str) -> None:
 
 def run_source(api: Api, smtp_api_url: str, revision: str) -> None:
     today = date.today().isoformat()
+    company_settings = {
+        "company_name": "TESTBETRIEB — NICHT BUCHEN",
+        "owner_name": "Synthetic Operator",
+        "address_line1": "Testweg 1",
+        "address_line2": "",
+        "zip_city": "00000 Teststadt",
+        "email": "operator@example.invalid",
+        "phone": "+49 000 000000",
+        "tax_id": "SYNTHETIC-TAX-ID",
+        "iban": "DE00000000000000000000",
+        "bic": "SYNTHETIC",
+        "bank_name": "Synthetic Test Bank",
+        "invoice_footer_note": "SYNTHETIC FOOTER — NICHT BUCHEN",
+        "invoice_number_prefix": "RE",
+        "quote_number_prefix": "AN",
+        "default_hourly_rate": "0",
+        "default_payment_terms_days": 14,
+    }
+    configured = api.request("PUT", "/api/settings", company_settings)
+    expect(
+        configured["invoice_footer_note"] == company_settings["invoice_footer_note"],
+        "synthetic company settings were not persisted",
+    )
     modules = api.request("GET", "/api/admin/modules")
     expect(all("value" not in item for item in modules), "module response exposed value field")
     expect(not any("smtp_password" in json.dumps(item) and "synthetic" in json.dumps(item) for item in modules), "secret leaked")
@@ -219,6 +258,8 @@ def run_source(api: Api, smtp_api_url: str, revision: str) -> None:
         {
             "name": "Synthetic Full Check Client",
             "contact_person": "Synthetic Recipient",
+            "address_line1": "Kunden-Testweg 2",
+            "zip_city": "00000 Teststadt",
             "email": "billing@example.invalid",
             "hourly_rate": "88.00",
         },
@@ -264,6 +305,48 @@ def run_source(api: Api, smtp_api_url: str, revision: str) -> None:
             "duration_minutes": 120,
         },
     )
+
+    # This is deliberately exercised on PostgreSQL, not the SQLite unit-test
+    # fixture: both requests contend for the invoice-number row lock.
+    parallel_entries = [
+        api.request(
+            "POST",
+            "/api/time-entries",
+            {
+                "client_id": client["id"],
+                "project_id": project["id"],
+                "date": today,
+                "description": f"Synthetic parallel invoice {index}",
+                "duration_minutes": 60,
+            },
+        )
+        for index in (1, 2)
+    ]
+
+    def create_parallel_invoice(index: int):
+        return api.request(
+            "POST",
+            "/api/invoices",
+            {
+                "client_id": client["id"],
+                "time_entry_ids": [parallel_entries[index]["id"]],
+                "tax_rate": "0",
+            },
+            headers={"Idempotency-Key": f"parallel-invoice-{index}"},
+        )
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        parallel_invoices = list(executor.map(create_parallel_invoice, (0, 1)))
+    parallel_numbers = sorted(
+        int(item["invoice_number"].rsplit("-", 1)[1]) for item in parallel_invoices
+    )
+    expect(
+        parallel_numbers[1] == parallel_numbers[0] + 1,
+        "parallel invoice numbers were not unique and consecutive",
+    )
+    for parallel_invoice, parallel_entry in zip(parallel_invoices, parallel_entries):
+        api.request("DELETE", f"/api/invoices/{parallel_invoice['id']}", expected=204)
+        api.request("DELETE", f"/api/time-entries/{parallel_entry['id']}", expected=204)
 
     catalog = api.request(
         "POST",
@@ -340,25 +423,75 @@ def run_source(api: Api, smtp_api_url: str, revision: str) -> None:
     invoice = api.request(
         "POST",
         "/api/invoices",
-        {"client_id": client["id"], "time_entry_ids": [manual["id"]]},
+        {"client_id": client["id"], "time_entry_ids": [manual["id"]], "tax_rate": "0"},
         headers=invoice_headers,
     )
     repeated_invoice = api.request(
         "POST",
         "/api/invoices",
-        {"client_id": client["id"], "time_entry_ids": [manual["id"]]},
+        {"client_id": client["id"], "time_entry_ids": [manual["id"]], "tax_rate": "0"},
         headers=invoice_headers,
     )
     expect(invoice["id"] == repeated_invoice["id"], "invoice command not idempotent")
     invoice_pdf, _ = api.request("GET", f"/api/invoices/{invoice['id']}/pdf", raw=True)
-    verify_pdf(invoice_pdf, os.path.join(api.work_dir, "invoice.pdf"), [invoice["invoice_number"], "Synthetic manual work", "246,90"])
+    verify_pdf(
+        invoice_pdf,
+        os.path.join(api.work_dir, "invoice.pdf"),
+        [
+            invoice["invoice_number"],
+            "Synthetic",
+            "manual",
+            "work",
+            "246,90",
+            "Steuer 0,00 %",
+            "TESTBETRIEB",
+            "Synthetic Operator",
+            "Kunden-Testweg 2",
+            "SYNTHETIC FOOTER",
+            "IBAN",
+            "Leistung am",
+        ],
+    )
+    changed_settings = dict(company_settings)
+    changed_settings["invoice_footer_note"] = "SYNTHETIC FOOTER V2 — NICHT BUCHEN"
+    api.request("PUT", "/api/settings", changed_settings)
+    stable_pdf, _ = api.request("GET", f"/api/invoices/{invoice['id']}/pdf", raw=True)
+    expect(stable_pdf == invoice_pdf, "existing invoice PDF changed after footer update")
 
     fixture_request(smtp_api_url, "POST", "/api/reset", {})
-    sent = api.request("POST", f"/api/invoices/{invoice['id']}/send")
+    first_send_body = {
+        "recipient": "billing@example.invalid",
+        "invoice_number": invoice["invoice_number"],
+        "total": invoice["total"],
+        "pdf_reviewed": True,
+        "resend": False,
+    }
+    sent = api.request(
+        "POST",
+        f"/api/invoices/{invoice['id']}/send",
+        first_send_body,
+        headers={"Idempotency-Key": "full-check-first-send"},
+    )
     expect(sent["status"] == "sent", "SMTP success did not mark sent")
-    api.request("POST", f"/api/invoices/{invoice['id']}/send")
+    first_sent_at = sent["sent_at"]
+    api.request(
+        "POST",
+        f"/api/invoices/{invoice['id']}/send",
+        first_send_body,
+        headers={"Idempotency-Key": "full-check-first-send"},
+    )
     messages = fixture_request(smtp_api_url, "GET", "/api/messages")
-    expect(len(messages) == 2, "repeated SMTP send not captured exactly twice")
+    expect(len(messages) == 1, "idempotent replay sent a duplicate SMTP message")
+    resend_body = {**first_send_body, "resend": True}
+    resent = api.request(
+        "POST",
+        f"/api/invoices/{invoice['id']}/send",
+        resend_body,
+        headers={"Idempotency-Key": "full-check-explicit-resend"},
+    )
+    expect(resent["sent_at"] == first_sent_at, "resend overwrote original sent_at")
+    messages = fixture_request(smtp_api_url, "GET", "/api/messages")
+    expect(len(messages) == 2, "explicit SMTP resend was not captured exactly once")
     for message in messages:
         expect(message["to"] == ["billing@example.invalid"], "SMTP recipient differs")
         expect(message["subject"] == f"Rechnung {invoice['invoice_number']}", "SMTP subject differs")
@@ -383,10 +516,28 @@ def run_source(api: Api, smtp_api_url: str, revision: str) -> None:
         failed_invoice = api.request(
             "POST",
             "/api/invoices",
-            {"client_id": client["id"], "time_entry_ids": [entry["id"]]},
+            {"client_id": client["id"], "time_entry_ids": [entry["id"]], "tax_rate": "0"},
         )
+        if mode == "reject":
+            expect(
+                failed_invoice["line_items"][0]["quantity"] == "0.08"
+                and failed_invoice["total"] == "9.88",
+                "five-minute invoice does not use its displayed rounded quantity",
+            )
         fixture_request(smtp_api_url, "POST", "/api/mode", {"mode": mode})
-        api.request("POST", f"/api/invoices/{failed_invoice['id']}/send", expected=502)
+        api.request(
+            "POST",
+            f"/api/invoices/{failed_invoice['id']}/send",
+            {
+                "recipient": "billing@example.invalid",
+                "invoice_number": failed_invoice["invoice_number"],
+                "total": failed_invoice["total"],
+                "pdf_reviewed": True,
+                "resend": False,
+            },
+            expected=502,
+            headers={"Idempotency-Key": f"full-check-failed-{mode}"},
+        )
         stored = api.request("GET", f"/api/invoices/{failed_invoice['id']}")
         expect(stored["status"] == "draft" and stored["sent_at"] is None, f"{mode} falsely marked sent")
         failure_invoices.append((failed_invoice["id"], entry["id"]))
@@ -395,7 +546,13 @@ def run_source(api: Api, smtp_api_url: str, revision: str) -> None:
     paid = api.request("PUT", f"/api/invoices/{invoice['id']}/status", {"status": "paid"})
     expect(paid["paid_at"] is not None, "paid timestamp missing")
     api.request("PUT", f"/api/invoices/{invoice['id']}/status", {"status": "cancelled"}, expected=400)
-    api.request("POST", f"/api/invoices/{invoice['id']}/send", expected=400)
+    api.request(
+        "POST",
+        f"/api/invoices/{invoice['id']}/send",
+        resend_body,
+        expected=400,
+        headers={"Idempotency-Key": "full-check-send-after-paid"},
+    )
 
     # Remove failure-only drafts so the exported/restored core count stays deterministic.
     for invoice_id, entry_id in failure_invoices:

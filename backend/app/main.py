@@ -16,7 +16,6 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import Base, SessionLocal, engine, get_db
-from app.deps import get_current_user, require_module
 from app.models import CompanySettings, User
 from app.module_registry import SCHEMA_VERSION
 from app.module_service import reconcile_module_installations
@@ -74,7 +73,11 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Essentials+ Freelancer", version="0.2.0", lifespan=lifespan)
+app = FastAPI(
+    title="Essentials+ Freelancer",
+    version=settings.product_version,
+    lifespan=lifespan,
+)
 
 allowed_origins = [
     origin.strip()
@@ -212,23 +215,14 @@ def readiness(db: Session = Depends(get_db)):
     }
 
 
-@app.get(
-    "/api/meta",
-    dependencies=[Depends(require_module("core.platform"))],
-)
-def metadata(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    del current_user
-    revision = (
-        db.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        if settings.run_migrations
-        else "metadata"
-    )
+@app.get("/api/meta")
+def metadata(db: Session = Depends(get_db)):
+    ready = readiness(db)
     return {
         "product": "Essentials+ Freelancer",
         "product_version": app.version,
-        "schema_revision": revision,
+        "schema_revision": ready["schema_revision"],
         "repository_revision": settings.repository_revision,
+        "build_time": settings.build_time,
+        "readiness": ready["status"],
     }

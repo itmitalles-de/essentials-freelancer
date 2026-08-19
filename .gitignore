@@ -27,5 +27,6 @@ android/.cxx/
 android/local.properties
 
 # misc
+build/
 .DS_Store
 *.log
