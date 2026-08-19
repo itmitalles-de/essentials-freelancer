@@ -5,7 +5,7 @@ import { api, ApiError, openQuotePdf } from "../api";
 import { useLanguage } from "../contexts/LanguageContext";
 import { Client, Project, Quote, QuoteStatus } from "../types";
 
-const emptyLine = () => ({ description: "", quantity: "1", unit: "hours", unit_price: "" });
+const emptyLine = () => ({ description: "", quantity: "1", unit: "hours", unit_price: "", tax_rate: "" });
 
 export function Quotes() {
   const { t } = useLanguage();
@@ -49,6 +49,7 @@ export function Quotes() {
           ...line,
           quantity: Number(line.quantity),
           unit_price: Number(line.unit_price),
+          tax_rate: Number(line.tax_rate),
         })),
       });
       resetForm();
@@ -109,13 +110,14 @@ export function Quotes() {
           </div>
           <textarea placeholder={t("quotes.notes")} value={notes} onChange={(event) => setNotes(event.target.value)} />
           {lines.map((line, index) => (
-            <div key={index} style={{ display: "grid", gridTemplateColumns: "2fr 0.7fr 1fr 1fr auto", gap: "0.5rem" }}>
+            <div key={index} style={{ display: "grid", gridTemplateColumns: "2fr 0.7fr 1fr 1fr 0.8fr auto", gap: "0.5rem" }}>
               <input required placeholder={t("quotes.description")} value={line.description} onChange={(event) => setLines(lines.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))} />
               <input required type="number" min="0.01" step="0.01" placeholder={t("quotes.quantity")} value={line.quantity} onChange={(event) => setLines(lines.map((item, itemIndex) => itemIndex === index ? { ...item, quantity: event.target.value } : item))} />
               <select value={line.unit} onChange={(event) => setLines(lines.map((item, itemIndex) => itemIndex === index ? { ...item, unit: event.target.value } : item))}>
                 {(["hours", "days", "items", "flat"] as const).map((unit) => <option key={unit} value={unit}>{t(`quotes.unit.${unit}`)}</option>)}
               </select>
               <input required type="number" min="0" step="0.01" placeholder={t("quotes.unitPrice")} value={line.unit_price} onChange={(event) => setLines(lines.map((item, itemIndex) => itemIndex === index ? { ...item, unit_price: event.target.value } : item))} />
+              <input required aria-label={t("quotes.taxRate")} type="number" min="0" max="100" step="0.01" placeholder={t("quotes.taxRate")} value={line.tax_rate} onChange={(event) => setLines(lines.map((item, itemIndex) => itemIndex === index ? { ...item, tax_rate: event.target.value } : item))} />
               <button type="button" className="secondary" disabled={lines.length === 1} onClick={() => setLines(lines.filter((_, itemIndex) => itemIndex !== index))}>{t("quotes.removeLine")}</button>
             </div>
           ))}

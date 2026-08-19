@@ -68,6 +68,17 @@ export interface Invoice {
   line_items: InvoiceLineItem[];
 }
 
+export interface InvoiceSendAttempt {
+  id: number;
+  recipient: string;
+  is_resend: boolean;
+  outcome: "pending" | "sent" | "failed";
+  message_id_redacted: string | null;
+  failure_code: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
 export type QuoteStatus = "draft" | "sent" | "accepted" | "rejected" | "converted";
 
 export interface QuoteLineItem {

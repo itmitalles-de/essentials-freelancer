@@ -165,6 +165,7 @@ class InvoiceLineItemOut(BaseModel):
 class InvoiceCreate(BaseModel):
     client_id: int
     time_entry_ids: list[int] = Field(min_length=1)
+    tax_rate: Decimal = Field(ge=0, le=100)
     notes: str = ""
     due_in_days: int | None = Field(default=None, ge=0)
 
@@ -199,13 +200,32 @@ class InvoiceStatusUpdate(BaseModel):
     status: InvoiceStatus
 
 
+class InvoiceSendRequest(BaseModel):
+    recipient: str = Field(min_length=3, max_length=255)
+    invoice_number: str = Field(min_length=1, max_length=64)
+    total: Decimal = Field(ge=0)
+    pdf_reviewed: bool
+    resend: bool = False
+
+
+class InvoiceSendAttemptOut(BaseModel):
+    id: int
+    recipient: str
+    is_resend: bool
+    outcome: str
+    message_id_redacted: str | None
+    failure_code: str | None
+    created_at: dt.datetime
+    completed_at: dt.datetime | None
+
+
 # ---- Quotes ----
 class QuoteLineItemCreate(BaseModel):
     description: str = Field(min_length=1)
     quantity: Decimal = Field(gt=0)
     unit: str = Field(default="hours", min_length=1, max_length=32)
     unit_price: Decimal = Field(ge=0)
-    tax_rate: Decimal = Field(default=Decimal("0"), ge=0, le=100)
+    tax_rate: Decimal = Field(ge=0, le=100)
 
 
 class QuoteLineItemOut(BaseModel):

@@ -40,6 +40,7 @@ describe("quote flow", () => {
     await user.type(screen.getByPlaceholderText("Positionsbeschreibung"), "Synthetic workshop");
     await user.clear(screen.getByPlaceholderText("Einzelpreis"));
     await user.type(screen.getByPlaceholderText("Einzelpreis"), "125");
+    await user.type(screen.getByRole("spinbutton", { name: "Steuersatz (%)" }), "0");
     await user.click(screen.getByRole("button", { name: "Angebot erstellen" }));
 
     await waitFor(() =>
@@ -54,6 +55,7 @@ describe("quote flow", () => {
             quantity: 1,
             unit: "hours",
             unit_price: 125,
+            tax_rate: 0,
           },
         ],
       })

@@ -11,6 +11,7 @@ vi.mock("../src/api", () => ({
   api: {
     get: vi.fn(),
     post: vi.fn(),
+    postIdempotent: vi.fn(),
   },
   openInvoicePdf: vi.fn(),
 }));
@@ -54,6 +55,7 @@ describe("invoice creation flow", () => {
       throw new Error(`Unexpected GET ${path}`);
     });
     vi.mocked(api.post).mockResolvedValue({});
+    vi.mocked(api.postIdempotent).mockResolvedValue({});
   });
 
   it("selects open time and creates an invoice for the matching client", async () => {
@@ -72,15 +74,21 @@ describe("invoice creation flow", () => {
       screen.getByRole("option", { name: "Example Consulting" })
     );
     await user.click(await screen.findByRole("checkbox"));
+    await user.type(screen.getByRole("spinbutton", { name: "Steuersatz (%)" }), "0");
     await user.click(
       screen.getByRole("button", { name: "Rechnung erstellen (1 Einträge)" })
     );
 
     await waitFor(() =>
-      expect(api.post).toHaveBeenCalledWith("/invoices", {
-        client_id: 4,
-        time_entry_ids: [9],
-      })
+      expect(api.postIdempotent).toHaveBeenCalledWith(
+        "/invoices",
+        expect.any(String),
+        {
+          client_id: 4,
+          time_entry_ids: [9],
+          tax_rate: "0",
+        }
+      )
     );
   });
 });

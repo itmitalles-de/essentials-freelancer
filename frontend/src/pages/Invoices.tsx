@@ -12,6 +12,8 @@ export function Invoices() {
   const [selectedClientId, setSelectedClientId] = useState<number | "">("");
   const [unbilled, setUnbilled] = useState<TimeEntry[]>([]);
   const [selectedEntries, setSelectedEntries] = useState<Set<number>>(new Set());
+  const [taxRate, setTaxRate] = useState("");
+  const [creating, setCreating] = useState(false);
 
   const loadInvoices = () => api.get<Invoice[]>("/invoices").then(setInvoices);
 
@@ -43,14 +45,22 @@ export function Invoices() {
   };
 
   const createInvoice = async () => {
-    if (!selectedClientId || selectedEntries.size === 0) return;
-    await api.post("/invoices", {
-      client_id: selectedClientId,
-      time_entry_ids: Array.from(selectedEntries),
-    });
-    setShowCreate(false);
-    setSelectedClientId("");
-    loadInvoices();
+    if (!selectedClientId || selectedEntries.size === 0 || taxRate === "" || creating) return;
+    setCreating(true);
+    try {
+      const key = globalThis.crypto?.randomUUID?.() ?? `invoice-${Date.now()}`;
+      await api.postIdempotent("/invoices", key, {
+        client_id: selectedClientId,
+        time_entry_ids: Array.from(selectedEntries),
+        tax_rate: taxRate,
+      });
+      setShowCreate(false);
+      setSelectedClientId("");
+      setTaxRate("");
+      loadInvoices();
+    } finally {
+      setCreating(false);
+    }
   };
 
   const clientName = (id: number) => clients.find((c) => c.id === id)?.name ?? "?";
@@ -70,6 +80,21 @@ export function Invoices() {
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
+
+          <label>
+            {t("invoices.taxRate")}
+            <input
+              aria-label={t("invoices.taxRate")}
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              required
+              value={taxRate}
+              onChange={(event) => setTaxRate(event.target.value)}
+            />
+          </label>
+          <div style={{ color: "var(--fg-muted)" }}>{t("invoices.taxRateHint")}</div>
 
           {selectedClientId !== "" && (
             <>
@@ -101,7 +126,7 @@ export function Invoices() {
                   </tbody>
                 </table>
               )}
-              <button onClick={createInvoice} disabled={selectedEntries.size === 0}>
+              <button onClick={createInvoice} disabled={selectedEntries.size === 0 || taxRate === "" || creating}>
                 {t("invoices.create")} ({selectedEntries.size} {t("invoices.entries")})
               </button>
             </>

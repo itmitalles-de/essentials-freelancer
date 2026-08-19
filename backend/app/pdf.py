@@ -34,6 +34,10 @@ def _eur(value: Decimal) -> str:
     return f"{value:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def _percent(value: Decimal) -> str:
+    return f"{value:.2f}".replace(".", ",")
+
+
 def _safe_text(value: object) -> str:
     return escape(str(value)).replace("\n", "<br/>")
 
@@ -84,7 +88,17 @@ def _generate_document(
     story = []
 
     sender_line = " · ".join(
-        filter(None, [company.company_name, company.address_line1, company.zip_city])
+        dict.fromkeys(
+            filter(
+                None,
+                [
+                    company.company_name,
+                    company.owner_name,
+                    company.address_line1,
+                    company.zip_city,
+                ],
+            )
+        )
     )
     logo = _logo_flowable(company.logo_path)
     if logo is not None:
@@ -178,8 +192,9 @@ def _generate_document(
         )
     for rate in sorted(tax_by_rate):
         amount = tax_by_rate[rate]
-        if amount:
-            total_rows.append([f"Steuer {rate:.2f} %", _eur(amount)])
+        # Keep an explicitly selected 0% rate visible. Net == gross alone is
+        # not enough evidence for an operator to review the tax selection.
+        total_rows.append([f"Steuer {_percent(rate)} %", _eur(amount)])
     if tax_total and not any(tax_by_rate.values()):
         total_rows.append(["Steuer", _eur(tax_total)])
     total_rows.append(["Gesamtbetrag", _eur(total)])

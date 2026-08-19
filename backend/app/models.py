@@ -75,7 +75,7 @@ class CompanySettings(Base):
     bank_name: Mapped[str] = mapped_column(String(255), default="")
     invoice_footer_note: Mapped[str] = mapped_column(
         Text,
-        default="Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.",
+        default="",
     )
     invoice_number_prefix: Mapped[str] = mapped_column(String(32), default="RE")
     next_invoice_number: Mapped[int] = mapped_column(Integer, default=1)
@@ -222,6 +222,9 @@ class Invoice(Base):
     line_items: Mapped[list["InvoiceLineItem"]] = relationship(
         back_populates="invoice", cascade="all, delete-orphan"
     )
+    send_attempts: Mapped[list["InvoiceSendAttempt"]] = relationship(
+        back_populates="invoice", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         Index("ix_invoices_reporting", "issue_date", "client_id", "status"),
@@ -232,6 +235,34 @@ class Invoice(Base):
             name="ck_invoices_totals",
         ),
         UniqueConstraint("request_key", name="uq_invoices_request_key"),
+    )
+
+
+class InvoiceSendAttempt(Base):
+    __tablename__ = "invoice_send_attempts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    invoice_id: Mapped[int] = mapped_column(
+        ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    recipient: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_resend: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    failure_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    invoice: Mapped["Invoice"] = relationship(back_populates="send_attempts")
+
+    __table_args__ = (
+        CheckConstraint(
+            "outcome IN ('pending', 'sent', 'failed')",
+            name="ck_invoice_send_attempts_outcome",
+        ),
+        Index("ix_invoice_send_attempts_invoice_created", "invoice_id", "created_at"),
     )
 
 

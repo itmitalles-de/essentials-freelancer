@@ -52,7 +52,11 @@ def test_project_links_time_and_invoice(
     invoice = client.post(
         "/api/invoices",
         headers=auth_headers,
-        json={"client_id": client_id, "time_entry_ids": [entry.json()["id"]]},
+        json={
+            "client_id": client_id,
+            "time_entry_ids": [entry.json()["id"]],
+            "tax_rate": "0",
+        },
     )
     assert invoice.status_code == 200, invoice.text
     assert invoice.json()["line_items"][0]["project_id"] == project_id
@@ -92,12 +96,14 @@ def test_quote_pdf_status_and_invoice_conversion(
                     "quantity": "2.00",
                     "unit": "hours",
                     "unit_price": "100.00",
+                    "tax_rate": "0",
                 },
                 {
                     "description": "Implementation package",
                     "quantity": "1.00",
                     "unit": "flat",
                     "unit_price": "500.00",
+                    "tax_rate": "0",
                 },
             ],
         },
@@ -169,6 +175,7 @@ def test_project_must_belong_to_quote_client(
                     "description": "Synthetic service",
                     "quantity": 1,
                     "unit_price": 10,
+                    "tax_rate": 0,
                 }
             ],
         },
