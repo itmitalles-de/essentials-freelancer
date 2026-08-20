@@ -69,6 +69,21 @@ files. Do not load every UI, router, test, or Android file by default.
   in `.agent/TODO.md`, not solely in chat.
 - Keep planned, implemented, and production-verified behavior distinct.
 
+## Simple Business UI contract
+
+For every product-owned web or Android UI change, first read the canonical,
+version-pinned Simple Business contract named in
+`.simple-business-design-system.json`. In the standard sibling checkout, the
+authoritative files are under `../simple-business-design-system/docs/design-system/`.
+Do not duplicate or reinterpret those rules in this repository.
+
+The central contract governs the shared shell, color/tokens, flat construction,
+sidebar/drawer behavior, settings anatomy, theme control, icon semantics, and
+five-direction comparison. Existing UI is legacy until migrated; do not add new
+violations. Package/lint activation remains gated by the central consumer
+manifest and must use an exact released version, never a floating branch, CDN,
+or runtime download.
+
 ## Validation
 
 Choose the checks relevant to the change:

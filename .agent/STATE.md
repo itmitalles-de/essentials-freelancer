@@ -85,3 +85,10 @@ signing key was supplied or exercised.
 - `docs/BACKUP_RESTORE.md`
 - `docs/INTERNAL_DEPLOYMENT_PLAN.md`
 - `.agent/TODO.md`
+
+## Simple Business design-system contract
+
+- `.simple-business-design-system.json` pins the central UI source to commit
+  `e508cc2` and package version `0.1.0`; no rules are copied into this product.
+- Existing web and Android UI remains legacy. Package/CI activation waits for
+  the central GitHub Actions billing blocker and is not claimed as complete.
