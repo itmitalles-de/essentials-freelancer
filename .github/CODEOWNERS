@@ -1,0 +1,32 @@
+# Default owner (verified repository administrator on 2026-08-19).
+* @itmitalles
+
+# Supply chain and workflow execution.
+/.github/workflows/ @itmitalles
+/android/gradle/ @itmitalles
+/backend/requirements*.txt @itmitalles
+/frontend/package*.json @itmitalles
+/*Dockerfile @itmitalles
+/**/Dockerfile @itmitalles
+/docker-compose*.yml @itmitalles
+
+# Schema and billing correctness.
+/backend/migrations/ @itmitalles
+/backend/app/models.py @itmitalles
+/backend/app/money.py @itmitalles
+/backend/app/pdf.py @itmitalles
+/backend/app/routers/invoices.py @itmitalles
+/backend/app/routers/quotes.py @itmitalles
+
+# Backup, restore, SMTP, and security boundaries.
+/scripts/export-business-data.sh @itmitalles
+/scripts/restore-business-data.sh @itmitalles
+/scripts/offsite-backup.sh @itmitalles
+/scripts/check-secrets.sh @itmitalles
+/scripts/collect-deployment-state.* @itmitalles
+/backend/app/email_utils.py @itmitalles
+/backend/app/security.py @itmitalles
+/backend/app/auth.py @itmitalles
+/backend/app/deps.py @itmitalles
+/docs/BACKUP_RESTORE.md @itmitalles
+/docs/operations/ @itmitalles

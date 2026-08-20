@@ -13,7 +13,7 @@ TEST_ROOT = Path(tempfile.mkdtemp(prefix="freelancer-tests-"))
 os.environ.update(
     {
         "DATABASE_URL": f"sqlite:///{TEST_ROOT / 'test.sqlite'}",
-        "JWT_SECRET": "test-only-jwt-secret",
+        "JWT_SECRET": "test-only-jwt-secret-at-least-32-bytes",
         "ADMIN_USERNAME": "test-admin",
         "ADMIN_PASSWORD": "test-only-password",
         "PDF_STORAGE_DIR": str(TEST_ROOT / "documents"),

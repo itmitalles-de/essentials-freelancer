@@ -9,6 +9,10 @@ const empty = {
   name: "",
   description: "",
   hourly_rate: "",
+  billing_rate_type_override: null as Project["billing_rate_type_override"],
+  default_service_mode: "remote" as Project["default_service_mode"],
+  is_individual_project: false,
+  billing_profile_confirmed: false,
   active: true,
 };
 
@@ -35,6 +39,10 @@ export function Projects() {
       name: project.name,
       description: project.description,
       hourly_rate: project.hourly_rate ?? "",
+      billing_rate_type_override: project.billing_rate_type_override,
+      default_service_mode: project.default_service_mode,
+      is_individual_project: project.is_individual_project,
+      billing_profile_confirmed: project.billing_profile_confirmed,
       active: project.active,
     });
     setShowForm(true);
@@ -91,15 +99,31 @@ export function Projects() {
           <input required placeholder={t("projects.name")} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
           <textarea style={{ gridColumn: "1 / -1" }} placeholder={t("projects.description")} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
           <input type="number" min="0" step="0.01" placeholder={t("projects.hourlyRate")} value={form.hourly_rate} onChange={(event) => setForm({ ...form, hourly_rate: event.target.value })} />
+          <label>{t("projects.billingRateOverride")}
+            <select value={form.billing_rate_type_override ?? ""} onChange={(event) => setForm({ ...form, billing_rate_type_override: (event.target.value || null) as Project["billing_rate_type_override"] })}>
+              <option value="">{t("billing.inherit")}</option>
+              <option value="private">{t("billing.private")}</option>
+              <option value="business">{t("billing.business")}</option>
+              <option value="custom">{t("billing.custom")}</option>
+            </select>
+          </label>
+          <label>{t("projects.serviceMode")}
+            <select value={form.default_service_mode} onChange={(event) => setForm({ ...form, default_service_mode: event.target.value as Project["default_service_mode"] })}>
+              <option value="remote">{t("billing.remote")}</option>
+              <option value="onsite">{t("billing.onsite")}</option>
+            </select>
+          </label>
+          <label><input type="checkbox" checked={form.is_individual_project} onChange={(event) => setForm({ ...form, is_individual_project: event.target.checked })} /> {t("projects.individual")}</label>
+          <label><input type="checkbox" checked={form.billing_profile_confirmed} onChange={(event) => setForm({ ...form, billing_profile_confirmed: event.target.checked })} /> {t("billing.profileConfirmed")}</label>
           <label><input type="checkbox" checked={form.active} onChange={(event) => setForm({ ...form, active: event.target.checked })} /> {t("projects.active")}</label>
           <button type="submit" style={{ gridColumn: "1 / -1" }}>{editingId === null ? t("projects.create") : t("projects.save")}</button>
         </form>
       )}
       <table className="card">
-        <thead><tr><th>{t("projects.name")}</th><th>{t("projects.colClient")}</th><th>{t("projects.colRate")}</th><th>{t("projects.colStatus")}</th><th></th></tr></thead>
+        <thead><tr><th>{t("projects.name")}</th><th>{t("projects.colClient")}</th><th>{t("projects.colRate")}</th><th>{t("projects.colBillingType")}</th><th>{t("projects.colServiceMode")}</th><th>{t("billing.colConfirmed")}</th><th>{t("projects.colStatus")}</th><th></th></tr></thead>
         <tbody>{projects.map((project) => (
           <tr key={project.id}>
-            <td>{project.name}</td><td>{clientName(project.client_id)}</td><td>{project.hourly_rate ?? "—"}</td><td>{project.active ? t("clients.statusActive") : t("clients.statusInactive")}</td>
+            <td>{project.name}</td><td>{clientName(project.client_id)}</td><td>{project.hourly_rate ?? t("billing.fromProfile")}</td><td>{project.billing_rate_type_override ? t(`billing.${project.billing_rate_type_override}`) : t("billing.inherit")}</td><td>{t(`billing.${project.default_service_mode}`)}</td><td>{project.billing_profile_confirmed ? t("common.yes") : t("common.no")}</td><td>{project.active ? t("clients.statusActive") : t("clients.statusInactive")}</td>
             <td style={{ display: "flex", gap: "0.4rem" }}><button className="secondary" onClick={() => startEdit(project)}>{t("projects.edit")}</button><button className="danger" onClick={() => remove(project.id)}>{t("projects.delete")}</button></td>
           </tr>
         ))}</tbody>

@@ -16,6 +16,7 @@ def test_openapi_contract_contains_protected_product_boundaries(client: TestClie
         "/api/reports/time.csv": {"get"},
         "/api/ready": {"get"},
         "/api/meta": {"get"},
+        "/api/invoices/{invoice_id}/send-attempts": {"get"},
     }
     for path, methods in expected_operations.items():
         assert path in schema["paths"]
@@ -26,6 +27,7 @@ def test_openapi_contract_contains_protected_product_boundaries(client: TestClie
     assert "ReportSummary" in schema["components"]["schemas"]
     report = schema["components"]["schemas"]["ReportSummary"]
     assert set(report["required"]) >= {"time", "quotes", "invoices", "expenses"}
+    assert "security" not in schema["paths"]["/api/meta"]["get"]
 
 
 def test_api_does_not_publish_internal_idempotency_or_secret_columns():
@@ -37,3 +39,17 @@ def test_api_does_not_publish_internal_idempotency_or_secret_columns():
         "smtp_password",
     ):
         assert internal_name not in schema_text
+
+
+def test_public_meta_contains_only_safe_deployment_fields(client: TestClient):
+    meta = client.get("/api/meta")
+    assert meta.status_code == 200
+    assert set(meta.json()) == {
+        "product",
+        "product_version",
+        "schema_revision",
+        "repository_revision",
+        "build_time",
+        "readiness",
+    }
+    assert meta.json()["readiness"] == "ready"

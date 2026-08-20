@@ -11,6 +11,9 @@ const empty = {
   zip_city: "",
   email: "",
   hourly_rate: "",
+  billing_rate_type: "private" as Client["billing_rate_type"],
+  default_service_mode: "remote" as Client["default_service_mode"],
+  billing_profile_confirmed: false,
   notes: "",
   active: true,
 };
@@ -38,6 +41,9 @@ export function Clients() {
       zip_city: c.zip_city,
       email: c.email,
       hourly_rate: c.hourly_rate ?? "",
+      billing_rate_type: c.billing_rate_type,
+      default_service_mode: c.default_service_mode,
+      billing_profile_confirmed: c.billing_profile_confirmed,
       notes: c.notes,
       active: c.active,
     });
@@ -90,7 +96,25 @@ export function Clients() {
           <input placeholder={t("clients.addressLine2")} value={form.address_line2} onChange={(e) => setForm({ ...form, address_line2: e.target.value })} />
           <input placeholder={t("clients.zipCity")} value={form.zip_city} onChange={(e) => setForm({ ...form, zip_city: e.target.value })} />
           <input placeholder={t("clients.email")} type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <input placeholder={t("clients.hourlyRate")} value={form.hourly_rate} onChange={(e) => setForm({ ...form, hourly_rate: e.target.value })} />
+          <input type="number" min="0" step="0.01" placeholder={t("clients.hourlyRate")} value={form.hourly_rate} onChange={(e) => setForm({ ...form, hourly_rate: e.target.value })} />
+          <label>{t("clients.billingRateType")}
+            <select value={form.billing_rate_type} onChange={(e) => setForm({ ...form, billing_rate_type: e.target.value as Client["billing_rate_type"] })}>
+              <option value="private">{t("billing.private")}</option>
+              <option value="business">{t("billing.business")}</option>
+              <option value="custom">{t("billing.custom")}</option>
+            </select>
+          </label>
+          <label>{t("clients.serviceMode")}
+            <select value={form.default_service_mode ?? ""} onChange={(e) => setForm({ ...form, default_service_mode: (e.target.value || null) as Client["default_service_mode"] })}>
+              <option value="">{t("billing.modeUnset")}</option>
+              <option value="remote">{t("billing.remote")}</option>
+              <option value="onsite">{t("billing.onsite")}</option>
+            </select>
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+            <input type="checkbox" checked={form.billing_profile_confirmed} onChange={(e) => setForm({ ...form, billing_profile_confirmed: e.target.checked })} />
+            {t("billing.profileConfirmed")}
+          </label>
           <label style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
             <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
             {t("clients.active")}
@@ -114,6 +138,9 @@ export function Clients() {
             <th>{t("clients.colContact")}</th>
             <th>{t("clients.colEmail")}</th>
             <th>{t("clients.colHourlyRate")}</th>
+            <th>{t("clients.colBillingType")}</th>
+            <th>{t("clients.colServiceMode")}</th>
+            <th>{t("billing.colConfirmed")}</th>
             <th>{t("clients.colStatus")}</th>
             <th></th>
           </tr>
@@ -124,7 +151,10 @@ export function Clients() {
               <td>{c.name}</td>
               <td>{c.contact_person}</td>
               <td>{c.email}</td>
-              <td>{c.hourly_rate ?? "—"}</td>
+              <td>{c.hourly_rate ?? t("billing.fromProfile")}</td>
+              <td>{t(`billing.${c.billing_rate_type}`)}</td>
+              <td>{c.default_service_mode ? t(`billing.${c.default_service_mode}`) : "—"}</td>
+              <td>{c.billing_profile_confirmed ? t("common.yes") : t("common.no")}</td>
               <td>{c.active ? t("clients.statusActive") : t("clients.statusInactive")}</td>
               <td style={{ display: "flex", gap: "0.4rem" }}>
                 <button className="secondary" onClick={() => startEdit(c)}>{t("clients.edit")}</button>

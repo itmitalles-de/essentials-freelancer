@@ -157,7 +157,12 @@ def test_needs_configuration_and_not_installed_states_block_access(
     client: TestClient, auth_headers: dict[str, str], db_session
 ):
     smtp = client.get("/api/admin/modules", headers=auth_headers).json()
-    assert module_by_id(smtp, "communication.smtp")["state"] == "needs_configuration"
+    assert module_by_id(smtp, "communication.smtp")["state"] == "disabled"
+    locked = client.post(
+        "/api/admin/modules/communication.smtp/enable", headers=auth_headers
+    )
+    assert locked.status_code == 409
+    assert locked.json()["detail"]["code"] == "pilot_module_locked"
 
     installation = db_session.get(ModuleInstallation, "expenses.receipts")
     installation.state = "not_installed"

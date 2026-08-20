@@ -18,6 +18,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,8 +28,9 @@ import de.itmitalles.tracker.viewmodel.AuthViewModel
 
 @Composable
 fun LoginScreen(viewModel: AuthViewModel) {
-    var serverUrl by remember { mutableStateOf("") }
-    var username by remember { mutableStateOf("") }
+    var serverUrl by rememberSaveable { mutableStateOf("") }
+    var username by rememberSaveable { mutableStateOf("") }
+    // Do not place a plaintext password in saved-instance state.
     var password by remember { mutableStateOf("") }
     val loading by viewModel.loading.collectAsState()
     val error by viewModel.loginError.collectAsState()

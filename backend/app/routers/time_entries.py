@@ -1,9 +1,17 @@
 from datetime import date
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.billing_policy import (
+    BillingDecision,
+    BillingPolicyError,
+    apply_billing_decision,
+    calculate_billing_decision,
+    recalculate_billable_minutes,
+)
 from app.database import get_db
 from app.deps import get_current_user, require_module
 from app.idempotency import request_fingerprint
@@ -40,17 +48,39 @@ def _project_for_client(
     return project
 
 
-def _default_rate(db: Session, client: Client, project: Project | None = None) -> float:
-    if project is not None and project.hourly_rate is not None:
-        return project.hourly_rate
-    if client.hourly_rate is not None:
-        return client.hourly_rate
+def _company_settings(db: Session) -> CompanySettings:
     company = db.get(CompanySettings, 1)
     if company is None:
         company = CompanySettings(id=1)
         db.add(company)
         db.flush()
-    return company.default_hourly_rate
+    return company
+
+
+def _decision(
+    *,
+    db: Session,
+    client: Client,
+    project: Project | None,
+    actual_minutes: int,
+    travel_actual_minutes: int,
+    is_first_order: bool,
+    service_mode: str | None,
+    explicit_hourly_rate: Decimal | None,
+) -> BillingDecision:
+    try:
+        return calculate_billing_decision(
+            actual_minutes=actual_minutes,
+            travel_actual_minutes=travel_actual_minutes,
+            is_first_order=is_first_order,
+            requested_service_mode=service_mode,
+            client=client,
+            project=project,
+            company=_company_settings(db),
+            explicit_hourly_rate=explicit_hourly_rate,
+        )
+    except BillingPolicyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("", response_model=list[TimeEntryOut])
@@ -97,9 +127,22 @@ def create_time_entry(
         raise HTTPException(status_code=404, detail="Kunde nicht gefunden")
     data = payload.model_dump()
     project = _project_for_client(db, data["project_id"], client.id)
-    if data["hourly_rate"] is None:
-        data["hourly_rate"] = _default_rate(db, client, project)
-    entry = TimeEntry(**data)
+    explicit_rate = (
+        Decimal(data["hourly_rate"]) if data["hourly_rate"] is not None else None
+    )
+    decision = _decision(
+        db=db,
+        client=client,
+        project=project,
+        actual_minutes=data["duration_minutes"],
+        travel_actual_minutes=data.pop("travel_actual_minutes"),
+        is_first_order=data.pop("is_first_order"),
+        service_mode=data.pop("service_mode"),
+        explicit_hourly_rate=explicit_rate,
+    )
+    data.pop("hourly_rate")
+    entry = TimeEntry(**data, hourly_rate=decision.hourly_rate)
+    apply_billing_decision(entry, decision)
     db.add(entry)
     db.commit()
     db.refresh(entry)
@@ -125,6 +168,36 @@ def update_time_entry(
         _project_for_client(db, changes["project_id"], entry.client_id)
     for key, value in changes.items():
         setattr(entry, key, value)
+    billing_fields = {
+        "project_id",
+        "duration_minutes",
+        "hourly_rate",
+        "service_mode",
+        "is_first_order",
+        "travel_actual_minutes",
+    }
+    if billing_fields.intersection(changes):
+        client = db.get(Client, entry.client_id)
+        project = _project_for_client(db, entry.project_id, entry.client_id)
+        explicit_rate = None
+        if "hourly_rate" in changes and changes["hourly_rate"] is not None:
+            explicit_rate = Decimal(changes["hourly_rate"])
+        elif (
+            "hourly_rate" not in changes
+            and entry.billing_rate_source == "time_entry_override"
+        ):
+            explicit_rate = Decimal(entry.hourly_rate)
+        decision = _decision(
+            db=db,
+            client=client,
+            project=project,
+            actual_minutes=entry.duration_minutes,
+            travel_actual_minutes=entry.travel_actual_minutes,
+            is_first_order=entry.is_first_order,
+            service_mode=entry.service_mode,
+            explicit_hourly_rate=explicit_rate,
+        )
+        apply_billing_decision(entry, decision)
     db.commit()
     db.refresh(entry)
     return entry
@@ -185,17 +258,28 @@ def start_timer(
             status_code=400, detail="Es läuft bereits ein Timer, zuerst stoppen"
         )
     now = utc_now_naive()
+    decision = _decision(
+        db=db,
+        client=client,
+        project=project,
+        actual_minutes=0,
+        travel_actual_minutes=payload.travel_actual_minutes,
+        is_first_order=payload.is_first_order,
+        service_mode=payload.service_mode.value if payload.service_mode else None,
+        explicit_hourly_rate=None,
+    )
     entry = TimeEntry(
         client_id=client.id,
         project_id=payload.project_id,
         date=now.date(),
         description=payload.description,
         duration_minutes=0,
-        hourly_rate=_default_rate(db, client, project),
+        hourly_rate=decision.hourly_rate,
         running_started_at=now,
         start_request_key=idempotency_key,
         start_request_fingerprint=fingerprint if idempotency_key else None,
     )
+    apply_billing_decision(entry, decision)
     db.add(entry)
     try:
         db.commit()
@@ -239,6 +323,11 @@ def stop_timer(
         return entry
     elapsed = utc_now_naive() - entry.running_started_at
     entry.duration_minutes += max(1, round(elapsed.total_seconds() / 60))
+    entry.billable_minutes = recalculate_billable_minutes(
+        actual_minutes=entry.duration_minutes,
+        minimum_minutes=entry.applied_minimum_minutes or 0,
+        increment_minutes=entry.applied_increment_minutes,
+    )
     entry.running_started_at = None
     db.commit()
     db.refresh(entry)

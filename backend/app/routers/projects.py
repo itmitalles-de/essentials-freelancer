@@ -71,7 +71,7 @@ def create_project(
 ):
     _client_or_404(db, payload.client_id)
     _unique_name_or_400(db, payload.client_id, payload.name)
-    project = Project(**payload.model_dump())
+    project = Project(**payload.model_dump(mode="json"))
     db.add(project)
     db.commit()
     db.refresh(project)
@@ -117,7 +117,7 @@ def update_project(
                 detail="Ein verknüpftes Projekt kann nicht zu einem anderen Kunden verschoben werden",
             )
     _unique_name_or_400(db, payload.client_id, payload.name, project_id)
-    for key, value in payload.model_dump().items():
+    for key, value in payload.model_dump(mode="json").items():
         setattr(project, key, value)
     db.commit()
     db.refresh(project)

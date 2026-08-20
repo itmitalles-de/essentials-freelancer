@@ -98,9 +98,10 @@ export function AdminModules() {
                       {module.state === "disabled" || module.state === "not_installed" ? (
                         <button
                           onClick={() => changeState(module, "enable")}
-                          disabled={busy === module.manifest.id}
+                          disabled={busy === module.manifest.id || module.manifest.id === "communication.smtp"}
+                          title={module.manifest.id === "communication.smtp" ? "Für den internen Pilot bis zur vollständigen Crash-Härtung gesperrt" : undefined}
                         >
-                          Aktivieren
+                          {module.manifest.id === "communication.smtp" ? "Pilotgesperrt" : "Aktivieren"}
                         </button>
                       ) : (
                         <button

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.config import settings as app_settings
 from app.database import get_db
 from app.deps import get_current_user, require_module
+from app.idempotency import request_fingerprint
 from app.models import (
     Client,
     Invoice,
@@ -24,7 +25,14 @@ from app.models import (
 from app.money import line_amounts, money
 from app.pdf import generate_invoice_pdf, generate_quote_pdf
 from app.routers.invoices import _get_or_create_settings
-from app.schemas import QuoteCreate, QuoteOut, QuoteStatusUpdate
+from app.schemas import (
+    QuoteCreate,
+    QuoteInvoiceConversion,
+    QuoteInvoicePreviewOut,
+    QuoteInvoicePreviewRequest,
+    QuoteOut,
+    QuoteStatusUpdate,
+)
 
 router = APIRouter(
     prefix="/api/quotes",
@@ -75,6 +83,103 @@ def _replace_line_items(quote: Quote, payload: QuoteCreate) -> Decimal:
     quote.tax_total = money(tax_total)
     quote.total = money(total)
     return total
+
+
+def _quote_invoice_preview(
+    *,
+    quote: Quote,
+    project: Project | None,
+    company,
+    service_date: date,
+) -> dict:
+    quote_tax_rates = {Decimal(item.tax_rate) for item in quote.line_items}
+    if company.small_business_notice_enabled:
+        if any(rate != Decimal("0") for rate in quote_tax_rates):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Das bestätigte Kleinunternehmerprofil kann nur mit "
+                    "0 Prozent verwendet werden"
+                ),
+            )
+        tax_notice = company.small_business_notice_text.strip()
+        if not tax_notice:
+            raise HTTPException(
+                status_code=409,
+                detail="Der bestätigte §-19-Hinweis fehlt",
+            )
+        tax_status = "small_business_section_19"
+    else:
+        tax_status = "operator_selected"
+        tax_notice = None
+
+    project_name = project.name if project is not None else None
+    lines = [
+        {
+            "quote_line_item_id": item.id,
+            "description": item.description,
+            "quantity": item.quantity,
+            "unit": item.unit,
+            "unit_price": item.unit_price,
+            "actual_minutes": None,
+            "billable_minutes": None,
+            "rate_type": "fixed_quote",
+            "minimum_minutes": None,
+            "increment_minutes": None,
+            "service_mode": None,
+            "billing_reason": "accepted_quote_fixed_price",
+            "service_date": service_date,
+            "project_id": quote.project_id,
+            "project_name": project_name,
+            "net_amount": item.net_amount,
+            "tax_rate": item.tax_rate,
+            "tax_amount": item.tax_amount,
+            "total_amount": item.amount,
+        }
+        for item in quote.line_items
+    ]
+    due_date = date.today() + timedelta(days=company.default_payment_terms_days)
+    token_payload = {
+        "quote_id": quote.id,
+        "lines": [
+            {
+                **line,
+                "quantity": str(line["quantity"]),
+                "unit_price": str(line["unit_price"]),
+                "service_date": line["service_date"].isoformat(),
+                "net_amount": str(line["net_amount"]),
+                "tax_rate": str(line["tax_rate"]),
+                "tax_amount": str(line["tax_amount"]),
+                "total_amount": str(line["total_amount"]),
+            }
+            for line in lines
+        ],
+        "subtotal": str(quote.subtotal),
+        "tax_total": str(quote.tax_total),
+        "total": str(quote.total),
+        "tax_status": tax_status,
+        "tax_notice": tax_notice,
+        "footer_note": company.invoice_footer_note,
+        "invoice_number_prefix": company.invoice_number_prefix,
+        "due_date": due_date.isoformat(),
+    }
+    return {
+        "quote_id": quote.id,
+        "lines": lines,
+        "work_total": money(0),
+        "travel_total": money(0),
+        "fixed_total": money(quote.subtotal),
+        "subtotal": money(quote.subtotal),
+        "tax_total": money(quote.tax_total),
+        "total": money(quote.total),
+        "tax_status": tax_status,
+        "tax_notice": tax_notice,
+        "service_date": service_date,
+        "due_date": due_date,
+        "confirmation_token": (
+            f"quote-confirm:{request_fingerprint(token_payload)}"
+        ),
+    }
 
 
 @router.get("", response_model=list[QuoteOut])
@@ -265,9 +370,38 @@ def update_quote_status(
     return quote
 
 
+@router.post("/{quote_id}/invoice-preview", response_model=QuoteInvoicePreviewOut)
+def preview_quote_invoice(
+    quote_id: int,
+    payload: QuoteInvoicePreviewRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    quote = db.get(Quote, quote_id)
+    if quote is None:
+        raise HTTPException(status_code=404, detail="Angebot nicht gefunden")
+    if quote.converted_invoice_id is not None:
+        raise HTTPException(
+            status_code=409, detail="Das Angebot wurde bereits in eine Rechnung übernommen"
+        )
+    if quote.status != QuoteStatus.accepted:
+        raise HTTPException(
+            status_code=400, detail="Nur angenommene Angebote können übernommen werden"
+        )
+    _, project = _client_and_project(db, quote.client_id, quote.project_id)
+    company = _get_or_create_settings(db)
+    return _quote_invoice_preview(
+        quote=quote,
+        project=project,
+        company=company,
+        service_date=payload.service_date,
+    )
+
+
 @router.post("/{quote_id}/convert", response_model=QuoteOut)
 def convert_quote_to_invoice(
     quote_id: int,
+    payload: QuoteInvoiceConversion,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -283,8 +417,22 @@ def convert_quote_to_invoice(
             status_code=400, detail="Nur angenommene Angebote können übernommen werden"
         )
 
-    client = db.get(Client, quote.client_id)
+    client, project = _client_and_project(db, quote.client_id, quote.project_id)
     company = _get_or_create_settings(db, lock_for_invoice_number=True)
+    preview = _quote_invoice_preview(
+        quote=quote,
+        project=project,
+        company=company,
+        service_date=payload.service_date,
+    )
+    if payload.billing_confirmation_token != preview["confirmation_token"]:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Die Angebotsabrechnung hat sich seit der Vorschau geändert. "
+                "Bitte Werte erneut prüfen und bestätigen"
+            ),
+        )
     today = date.today()
     invoice = Invoice(
         client_id=quote.client_id,
@@ -297,6 +445,10 @@ def convert_quote_to_invoice(
         subtotal=quote.subtotal,
         tax_total=quote.tax_total,
         total=quote.total,
+        tax_status_snapshot=preview["tax_status"],
+        tax_notice_snapshot=preview["tax_notice"],
+        footer_note_snapshot=company.invoice_footer_note,
+        billing_confirmation_token=preview["confirmation_token"],
     )
     db.add(invoice)
     db.flush()
@@ -312,6 +464,19 @@ def convert_quote_to_invoice(
                 tax_amount=item.tax_amount,
                 amount=item.amount,
                 project_id=quote.project_id,
+                snapshot_line_kind="fixed_quote",
+                snapshot_actual_minutes=None,
+                snapshot_billable_minutes=None,
+                snapshot_hourly_rate=None,
+                snapshot_rate_type="fixed_quote",
+                snapshot_minimum_minutes=None,
+                snapshot_increment_minutes=None,
+                snapshot_service_mode=None,
+                snapshot_is_first_order=None,
+                snapshot_billing_reason="accepted_quote_fixed_price",
+                snapshot_billing_policy_id=preview["confirmation_token"],
+                snapshot_service_date=payload.service_date,
+                snapshot_project_name=project.name if project is not None else None,
             )
         )
     company.next_invoice_number += 1

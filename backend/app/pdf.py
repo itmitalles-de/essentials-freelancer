@@ -34,6 +34,10 @@ def _eur(value: Decimal) -> str:
     return f"{value:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def _percent(value: Decimal) -> str:
+    return f"{value:.2f}".replace(".", ",")
+
+
 def _safe_text(value: object) -> str:
     return escape(str(value)).replace("\n", "<br/>")
 
@@ -64,6 +68,8 @@ def _generate_document(
     client: Client,
     company: CompanySettings,
     include_payment_details: bool,
+    footer_note: str = "",
+    tax_notice: str | None = None,
 ) -> str:
     os.makedirs(settings.pdf_storage_dir, exist_ok=True)
     temporary_path = f"{file_path}.{uuid.uuid4().hex}.tmp"
@@ -84,7 +90,17 @@ def _generate_document(
     story = []
 
     sender_line = " · ".join(
-        filter(None, [company.company_name, company.address_line1, company.zip_city])
+        dict.fromkeys(
+            filter(
+                None,
+                [
+                    company.company_name,
+                    company.owner_name,
+                    company.address_line1,
+                    company.zip_city,
+                ],
+            )
+        )
     )
     logo = _logo_flowable(company.logo_path)
     if logo is not None:
@@ -139,11 +155,43 @@ def _generate_document(
 
     table_data = [["Beschreibung", "Menge", "Einheit", "Einzelpreis netto", "Betrag brutto"]]
     for item in line_items:
+        has_billing_snapshot = getattr(item, "snapshot_line_kind", None) in {
+            "work",
+            "travel",
+        }
+        if has_billing_snapshot:
+            quantity = f"{Decimal(item.quantity):.4f}"
+            unit = "Std."
+            details = (
+                f"Tatsächlich: {item.snapshot_actual_minutes} Min. · "
+                f"Abrechenbar: {item.snapshot_billable_minutes} Min. · "
+                f"Mindestzeit: {item.snapshot_minimum_minutes or 0} Min. · "
+                f"Rundung: "
+                f"{str(item.snapshot_increment_minutes) + ' Min.' if item.snapshot_increment_minutes else 'keine'} · "
+                f"\nStundensatz: {_eur(Decimal(item.snapshot_hourly_rate))}/Std."
+            )
+            if item.snapshot_service_date:
+                details = (
+                    f"{details}\nLeistungsdatum: "
+                    f"{item.snapshot_service_date.strftime('%d.%m.%Y')}"
+                )
+            project = (
+                f"\nProjekt: {item.snapshot_project_name}"
+                if item.snapshot_project_name
+                else ""
+            )
+            description = f"{item.description}{project}\n{details}"
+        else:
+            quantity = f"{Decimal(item.quantity):.2f}"
+            unit = UNIT_LABELS.get(item.unit, item.unit)
+            description = item.description
+            if getattr(item, "snapshot_project_name", None):
+                description = f"{description}\nProjekt: {item.snapshot_project_name}"
         table_data.append(
             [
-                _paragraph(item.description, small),
-                f"{Decimal(item.quantity):.2f}",
-                UNIT_LABELS.get(item.unit, item.unit),
+                _paragraph(description, small),
+                quantity,
+                unit,
                 _eur(Decimal(item.unit_price)),
                 _eur(Decimal(item.amount)),
             ]
@@ -178,8 +226,9 @@ def _generate_document(
         )
     for rate in sorted(tax_by_rate):
         amount = tax_by_rate[rate]
-        if amount:
-            total_rows.append([f"Steuer {rate:.2f} %", _eur(amount)])
+        # Keep an explicitly selected 0% rate visible. Net == gross alone is
+        # not enough evidence for an operator to review the tax selection.
+        total_rows.append([f"Steuer {_percent(rate)} %", _eur(amount)])
     if tax_total and not any(tax_by_rate.values()):
         total_rows.append(["Steuer", _eur(tax_total)])
     total_rows.append(["Gesamtbetrag", _eur(total)])
@@ -201,8 +250,11 @@ def _generate_document(
     if notes:
         story.append(_paragraph(notes, small))
         story.append(Spacer(1, 6 * mm))
-    if company.invoice_footer_note:
-        story.append(_paragraph(company.invoice_footer_note, small))
+    if tax_notice:
+        story.append(_paragraph(tax_notice, small))
+        story.append(Spacer(1, 6 * mm))
+    if footer_note:
+        story.append(_paragraph(footer_note, small))
         story.append(Spacer(1, 6 * mm))
 
     if include_payment_details:
@@ -251,6 +303,12 @@ def generate_invoice_pdf(
         client=client,
         company=company,
         include_payment_details=True,
+        footer_note=(
+            invoice.footer_note_snapshot
+            if invoice.footer_note_snapshot is not None
+            else company.invoice_footer_note
+        ),
+        tax_notice=invoice.tax_notice_snapshot,
     )
 
 
@@ -279,4 +337,5 @@ def generate_quote_pdf(
         client=client,
         company=company,
         include_payment_details=False,
+        footer_note=company.invoice_footer_note,
     )

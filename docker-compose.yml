@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
     restart: unless-stopped
     environment:
       POSTGRES_USER: tracker
@@ -15,7 +15,12 @@ services:
       retries: 10
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      args:
+        PRODUCT_VERSION: ${PRODUCT_VERSION:-0.2.0}
+        REPOSITORY_REVISION: ${REPOSITORY_REVISION:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
     restart: unless-stopped
     depends_on:
       db:
@@ -35,14 +40,13 @@ services:
       LOGIN_RATE_LIMIT_PER_MINUTE: ${LOGIN_RATE_LIMIT_PER_MINUTE:-10}
       SMTP_RATE_LIMIT_PER_MINUTE: ${SMTP_RATE_LIMIT_PER_MINUTE:-10}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
-      REPOSITORY_REVISION: ${REPOSITORY_REVISION:-unknown}
       OFFSITE_REPOSITORY_CONFIGURED: ${OFFSITE_REPOSITORY_CONFIGURED:-false}
       OFFSITE_PASSWORD_FILE_CONFIGURED: ${OFFSITE_PASSWORD_FILE_CONFIGURED:-false}
       PDF_STORAGE_DIR: /data/invoices
     volumes:
       - tracker_invoices:/data/invoices
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/ready', timeout=3)"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -67,7 +71,7 @@ services:
       start_period: 10s
 
   freelancer-dashboard:
-    image: b4bz/homer:v26.4.2
+    image: b4bz/homer:v26.4.2@sha256:ace7c6a2cfb66e13f0e94d5534cb569562f190aa5cac9446b2453ef7822cd195
     restart: unless-stopped
     user: "1000:1000"
     environment:

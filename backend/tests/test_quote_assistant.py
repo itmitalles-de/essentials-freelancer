@@ -356,7 +356,22 @@ def test_draft_snapshot_human_approval_transfer_and_one_time_invoice_conversion(
             headers=auth_headers,
             json={"status": status},
         ).status_code == 200
-    converted = client.post(f"/api/quotes/{quote_id}/convert", headers=auth_headers)
+    conversion_preview = client.post(
+        f"/api/quotes/{quote_id}/invoice-preview",
+        headers=auth_headers,
+        json={"service_date": "2026-08-20"},
+    )
+    assert conversion_preview.status_code == 200, conversion_preview.text
+    conversion_payload = {
+        "service_date": "2026-08-20",
+        "billing_confirmation_token": conversion_preview.json()["confirmation_token"],
+        "billing_confirmed": True,
+    }
+    converted = client.post(
+        f"/api/quotes/{quote_id}/convert",
+        headers=auth_headers,
+        json=conversion_payload,
+    )
     assert converted.status_code == 200, converted.text
     invoice_id = converted.json()["converted_invoice_id"]
     invoice = client.get(f"/api/invoices/{invoice_id}", headers=auth_headers).json()
@@ -364,7 +379,9 @@ def test_draft_snapshot_human_approval_transfer_and_one_time_invoice_conversion(
     assert Decimal(invoice["tax_total"]) == Decimal("39.71")
     assert Decimal(invoice["total"]) == Decimal("248.71")
     repeated_conversion = client.post(
-        f"/api/quotes/{quote_id}/convert", headers=auth_headers
+        f"/api/quotes/{quote_id}/convert",
+        headers=auth_headers,
+        json=conversion_payload,
     )
     assert repeated_conversion.status_code == 200
     assert repeated_conversion.json()["converted_invoice_id"] == invoice_id

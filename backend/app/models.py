@@ -50,6 +50,17 @@ class AssistantDraftStatus(str, enum.Enum):
     transferred = "transferred"
 
 
+class BillingRateType(str, enum.Enum):
+    private = "private"
+    business = "business"
+    custom = "custom"
+
+
+class ServiceMode(str, enum.Enum):
+    remote = "remote"
+    onsite = "onsite"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -75,7 +86,7 @@ class CompanySettings(Base):
     bank_name: Mapped[str] = mapped_column(String(255), default="")
     invoice_footer_note: Mapped[str] = mapped_column(
         Text,
-        default="Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.",
+        default="",
     )
     invoice_number_prefix: Mapped[str] = mapped_column(String(32), default="RE")
     next_invoice_number: Mapped[int] = mapped_column(Integer, default=1)
@@ -84,6 +95,47 @@ class CompanySettings(Base):
     logo_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     default_hourly_rate: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
     default_payment_terms_days: Mapped[int] = mapped_column(Integer, default=14)
+    private_hourly_rate: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), default=Decimal("50.00")
+    )
+    business_hourly_rate: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), default=Decimal("75.00")
+    )
+    travel_hourly_rate: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), default=Decimal("30.00")
+    )
+    first_order_minimum_minutes: Mapped[int] = mapped_column(Integer, default=60)
+    onsite_minimum_minutes: Mapped[int] = mapped_column(Integer, default=60)
+    remote_increment_minutes: Mapped[int] = mapped_column(Integer, default=15)
+    travel_minimum_minutes: Mapped[int] = mapped_column(Integer, default=30)
+    travel_increment_minutes: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    default_tax_rate: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), default=Decimal("0.00")
+    )
+    small_business_notice_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False
+    )
+    small_business_notice_text: Mapped[str] = mapped_column(Text, default="")
+
+    __table_args__ = (
+        CheckConstraint(
+            "private_hourly_rate >= 0 AND business_hourly_rate >= 0 "
+            "AND travel_hourly_rate >= 0",
+            name="ck_company_settings_billing_rates",
+        ),
+        CheckConstraint(
+            "first_order_minimum_minutes >= 0 AND onsite_minimum_minutes >= 0 "
+            "AND remote_increment_minutes > 0 AND travel_minimum_minutes >= 0 "
+            "AND (travel_increment_minutes IS NULL OR travel_increment_minutes > 0)",
+            name="ck_company_settings_billing_minutes",
+        ),
+        CheckConstraint(
+            "default_tax_rate >= 0 AND default_tax_rate <= 100",
+            name="ck_company_settings_default_tax_rate",
+        ),
+    )
 
 
 class Client(Base):
@@ -97,6 +149,9 @@ class Client(Base):
     zip_city: Mapped[str] = mapped_column(String(255), default="")
     email: Mapped[str] = mapped_column(String(255), default="")
     hourly_rate: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    billing_rate_type: Mapped[str] = mapped_column(String(16), default="private")
+    default_service_mode: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    billing_profile_confirmed: Mapped[bool] = mapped_column(Boolean, default=True)
     notes: Mapped[str] = mapped_column(Text, default="")
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
@@ -110,6 +165,14 @@ class Client(Base):
         CheckConstraint(
             "hourly_rate IS NULL OR hourly_rate >= 0", name="ck_clients_hourly_rate"
         ),
+        CheckConstraint(
+            "billing_rate_type IN ('private', 'business', 'custom')",
+            name="ck_clients_billing_rate_type",
+        ),
+        CheckConstraint(
+            "default_service_mode IS NULL OR default_service_mode IN ('remote', 'onsite')",
+            name="ck_clients_default_service_mode",
+        ),
     )
 
 
@@ -121,6 +184,12 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(255))
     description: Mapped[str] = mapped_column(Text, default="")
     hourly_rate: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    billing_rate_type_override: Mapped[str | None] = mapped_column(
+        String(16), nullable=True
+    )
+    default_service_mode: Mapped[str] = mapped_column(String(16), default="remote")
+    is_individual_project: Mapped[bool] = mapped_column(Boolean, default=False)
+    billing_profile_confirmed: Mapped[bool] = mapped_column(Boolean, default=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
 
@@ -132,6 +201,15 @@ class Project(Base):
         UniqueConstraint("client_id", "name", name="uq_projects_client_name"),
         CheckConstraint(
             "hourly_rate IS NULL OR hourly_rate >= 0", name="ck_projects_hourly_rate"
+        ),
+        CheckConstraint(
+            "billing_rate_type_override IS NULL OR "
+            "billing_rate_type_override IN ('private', 'business', 'custom')",
+            name="ck_projects_billing_rate_type_override",
+        ),
+        CheckConstraint(
+            "default_service_mode IN ('remote', 'onsite')",
+            name="ck_projects_default_service_mode",
         ),
     )
 
@@ -148,6 +226,26 @@ class TimeEntry(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     duration_minutes: Mapped[int] = mapped_column(Integer, default=0)
     hourly_rate: Mapped[float] = mapped_column(Numeric(10, 2))
+    billable_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    billing_rate_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    billing_rate_source: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    applied_minimum_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    applied_increment_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    service_mode: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    is_first_order: Mapped[bool] = mapped_column(Boolean, default=False)
+    billing_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    billing_policy_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    billing_policy_applied: Mapped[bool] = mapped_column(Boolean, default=True)
+    travel_actual_minutes: Mapped[int] = mapped_column(Integer, default=0)
+    travel_billable_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    travel_hourly_rate: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2), nullable=True
+    )
+    travel_minimum_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    travel_increment_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    travel_billing_reason: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
     running_started_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True
     )
@@ -184,10 +282,31 @@ class TimeEntry(Base):
         ),
         CheckConstraint("duration_minutes >= 0", name="ck_time_entries_duration"),
         CheckConstraint("hourly_rate >= 0", name="ck_time_entries_hourly_rate"),
+        CheckConstraint(
+            "billable_minutes IS NULL OR billable_minutes >= 0",
+            name="ck_time_entries_billable_minutes",
+        ),
+        CheckConstraint(
+            "billing_rate_type IS NULL OR billing_rate_type IN ('private', 'business', 'custom')",
+            name="ck_time_entries_billing_rate_type",
+        ),
+        CheckConstraint(
+            "service_mode IS NULL OR service_mode IN ('remote', 'onsite')",
+            name="ck_time_entries_service_mode",
+        ),
+        CheckConstraint(
+            "travel_actual_minutes >= 0 AND "
+            "(travel_billable_minutes IS NULL OR travel_billable_minutes >= 0)",
+            name="ck_time_entries_travel_minutes",
+        ),
         UniqueConstraint(
             "start_request_key", name="uq_time_entries_start_request_key"
         ),
     )
+
+    @property
+    def actual_minutes(self) -> int:
+        return self.duration_minutes
 
 
 class Invoice(Base):
@@ -216,10 +335,19 @@ class Invoice(Base):
         String(128), nullable=True
     )
     request_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    tax_status_snapshot: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    tax_notice_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+    footer_note_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+    billing_confirmation_token: Mapped[str | None] = mapped_column(
+        String(80), nullable=True
+    )
 
     client: Mapped["Client"] = relationship(back_populates="invoices")
     time_entries: Mapped[list["TimeEntry"]] = relationship(back_populates="invoice")
     line_items: Mapped[list["InvoiceLineItem"]] = relationship(
+        back_populates="invoice", cascade="all, delete-orphan"
+    )
+    send_attempts: Mapped[list["InvoiceSendAttempt"]] = relationship(
         back_populates="invoice", cascade="all, delete-orphan"
     )
 
@@ -235,13 +363,41 @@ class Invoice(Base):
     )
 
 
+class InvoiceSendAttempt(Base):
+    __tablename__ = "invoice_send_attempts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    invoice_id: Mapped[int] = mapped_column(
+        ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    recipient: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_resend: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    failure_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    invoice: Mapped["Invoice"] = relationship(back_populates="send_attempts")
+
+    __table_args__ = (
+        CheckConstraint(
+            "outcome IN ('pending', 'sent', 'failed')",
+            name="ck_invoice_send_attempts_outcome",
+        ),
+        Index("ix_invoice_send_attempts_invoice_created", "invoice_id", "created_at"),
+    )
+
+
 class InvoiceLineItem(Base):
     __tablename__ = "invoice_line_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     invoice_id: Mapped[int] = mapped_column(ForeignKey("invoices.id"))
     description: Mapped[str] = mapped_column(Text)
-    quantity: Mapped[float] = mapped_column(Numeric(10, 2))
+    quantity: Mapped[float] = mapped_column(Numeric(12, 4))
     unit_price: Mapped[float] = mapped_column(Numeric(10, 2))
     net_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     tax_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=0)
@@ -250,6 +406,37 @@ class InvoiceLineItem(Base):
     unit: Mapped[str] = mapped_column(String(32), default="hours")
     project_id: Mapped[int | None] = mapped_column(
         ForeignKey("projects.id"), nullable=True, index=True
+    )
+    snapshot_line_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    snapshot_actual_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    snapshot_billable_minutes: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    snapshot_hourly_rate: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2), nullable=True
+    )
+    snapshot_rate_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    snapshot_minimum_minutes: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    snapshot_increment_minutes: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    snapshot_service_mode: Mapped[str | None] = mapped_column(
+        String(16), nullable=True
+    )
+    snapshot_is_first_order: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True
+    )
+    snapshot_billing_reason: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    snapshot_billing_policy_id: Mapped[str | None] = mapped_column(
+        String(80), nullable=True
+    )
+    snapshot_service_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    snapshot_project_name: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
     )
 
     invoice: Mapped["Invoice"] = relationship(back_populates="line_items")

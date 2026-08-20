@@ -1,6 +1,6 @@
 # Codex-Folgeauftrag: Essentials+ Freelancer extern verifizieren und releasefähig halten
 
-Arbeite im Repository `itmitalles-de/freelancer` auf Basis des gemergten
+Arbeite im Repository `itmitalles-de/essentials-freelancer` auf Basis des gemergten
 Essentials+-Stands. Lies zuerst `AGENTS.md`, `.agent/STATE.md`,
 `.agent/TODO.md`, `README.md`, `docs/VERIFICATION_MATRIX.md` und
 `docs/BACKUP_RESTORE.md`. Verwende Code, Migrationen und Tests als Source of

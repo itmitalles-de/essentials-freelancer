@@ -72,21 +72,37 @@ export const api = {
   put: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  postIdempotent: <T>(path: string, idempotencyKey: string, body: unknown) =>
+    request<T>(path, {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(body),
+    }),
 };
 
 async function openAuthenticatedPdf(path: string, fileName: string) {
+  const popup = window.open("about:blank", "_blank");
+  if (popup) popup.opener = null;
   const token = getToken();
   const res = await fetch(`${API_BASE}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
-  if (!res.ok) throw new ApiError(res.status, "PDF konnte nicht geladen werden");
+  if (!res.ok) {
+    popup?.close();
+    throw new ApiError(res.status, "PDF konnte nicht geladen werden");
+  }
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.target = "_blank";
-  a.download = fileName;
-  a.click();
+  if (popup) {
+    popup.location.href = url;
+  } else {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
+    anchor.setAttribute("aria-label", fileName);
+    anchor.click();
+  }
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 

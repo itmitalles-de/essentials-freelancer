@@ -1,39 +1,49 @@
 # TODO
 
-This is the authoritative continuation source. `docs/NICE_TO_HAVE.md` is an idea
-record, not an active backlog.
+This is the authoritative continuation source. The pilot feature freeze in
+`docs/PILOT_SCOPE.md` forbids additional product modules.
 
-## Now
+## Next authorized operational action
 
-- [ ] Review the Draft PR checks for
-  `agent/essentials-freelancer-autonomous`; address reproducible repository/CI
-  failures without weakening or skipping the full acceptance target.
+- [ ] Record one exact authorized internal Docker host, access method, Compose
+  directory, proxy boundary, and approved encrypted backup target. Then follow
+  `docs/INTERNAL_DEPLOYMENT_PLAN.md` from the squash-merged `master` commit.
+- [ ] Before real data, configure and consciously confirm Tim's operator,
+  billing and § 19 profile; create only marked test objects; run the complete
+  shadow flow; store image IDs/digests and deployed commit outside Git.
+- [ ] Create an encrypted complete backup and prove restore into a separately
+  named empty installation. Stop on any revision, schema, count, document hash,
+  invoice number, billing preview, PDF, SMTP-lock, proxy, or TLS mismatch.
 
-## Blocked
+No deployment may start from a placeholder or guessed address. SMTP stays
+disabled and is not an external gate for the first pilot.
 
-- [ ] Prove the revision actually deployed, service/readiness state, legacy
-  volumes, and public proxy/DNS/TLS path. Blocked on authorized production or
-  staging access and deployment-specific evidence.
-- [ ] Prove real SMTP authentication, provider acceptance and delivery to a safe
-  controlled recipient while retaining failed-send state guarantees. Blocked on
-  an approved external SMTP test account and recipient.
-- [ ] Initialize/inspect the approved remote restic/rclone target, run the real
-  scheduled service, verify retention, and restore into isolated infrastructure.
-  Blocked on provider selection, protected credentials, and deployment access.
-- [ ] Verify Android behavior on supported devices/emulators and release signing
-  if a distributable release is required. Blocked on the release environment and
-  signing authority; debug/JVM automation is already present.
+## External gates
 
-## Recently completed
+- [ ] **Deployment:** exact target authorization and access are absent.
+- [ ] **Persistent encrypted backup:** approved target and protected credentials
+  are absent; the local Restic rehearsal is not offsite evidence.
+- [ ] **Operator profile:** real name/address/bank/payment-term/prefix and the
+  exact § 19 notice must be approved at deployment time and kept out of Git.
+- [ ] **Android release:** production signing/distribution remains outside the
+  debug internal-pilot smoke.
+- [ ] **Governance:** the private-repository plan previously returned HTTP 403
+  for branch protection/rulesets; PR #3 checks/manual review remain the
+  compensating release record.
 
-- [x] Implement Essentials+ manifests, persisted states, server/navigation/job
-  enforcement, grouped Admin Center, auditing, dependency rules and secret
-  redaction (`a1464f8`, 2026-08-13).
-- [x] Implement the deterministic versioned quote assistant with immutable
-  Decimal snapshots, human approval and idempotent transfer (`d93d997`,
-  2026-08-13).
-- [x] Add reporting/CSV, constraints/indexes/idempotency, structured operational
-  behavior, MIME/security/rate-limit hardening and tests (`59245b0`, 2026-08-13).
-- [x] Add the disposable API/browser/SMTP/export/restic/empty-target restore
-  acceptance target, CI integration, verification matrix, and explicit external
-  evidence boundaries on the active branch.
+## Completed in the billing-policy workstream
+
+- [x] Implement configurable private/business/custom and travel rates without
+  retaining the incorrect prior rate assumption.
+- [x] Persist explicit time decisions and immutable invoice/tax/footer/PDF
+  snapshots; require visible exact-token operator confirmation.
+- [x] Keep quote preparation free and require a separate confirmed fixed-price
+  conversion preview without invented time facts.
+- [x] Add additive `0007` migration values and prove a populated PostgreSQL
+  `0006` copy upgrades without historical invoice/document drift.
+- [x] Lock SMTP disabled with zero fixture messages and manual PDF delivery.
+- [x] Cover billing examples, Decimal limits, parallel numbering, tax profile,
+  PDF evidence, migration, browser accessibility, Android, backup and isolated
+  restore in `make full-check`.
+- [x] Complete an independent review of prices, minima, rounding, tax, old data,
+  totals, SMTP crash risk, backup and restore with no open P0/P1.

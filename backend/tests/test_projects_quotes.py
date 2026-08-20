@@ -49,10 +49,23 @@ def test_project_links_time_and_invoice(
     assert entry.json()["project_id"] == project_id
     assert entry.json()["hourly_rate"] == "95.00"
 
+    invoice_payload = {
+        "client_id": client_id,
+        "time_entry_ids": [entry.json()["id"]],
+        "tax_rate": "0",
+    }
+    preview = client.post(
+        "/api/invoices/preview", headers=auth_headers, json=invoice_payload
+    )
+    assert preview.status_code == 200, preview.text
+    invoice_payload.update(
+        {
+            "billing_confirmation_token": preview.json()["confirmation_token"],
+            "billing_confirmed": True,
+        }
+    )
     invoice = client.post(
-        "/api/invoices",
-        headers=auth_headers,
-        json={"client_id": client_id, "time_entry_ids": [entry.json()["id"]]},
+        "/api/invoices", headers=auth_headers, json=invoice_payload
     )
     assert invoice.status_code == 200, invoice.text
     assert invoice.json()["line_items"][0]["project_id"] == project_id
@@ -92,12 +105,14 @@ def test_quote_pdf_status_and_invoice_conversion(
                     "quantity": "2.00",
                     "unit": "hours",
                     "unit_price": "100.00",
+                    "tax_rate": "0",
                 },
                 {
                     "description": "Implementation package",
                     "quantity": "1.00",
                     "unit": "flat",
                     "unit_price": "500.00",
+                    "tax_rate": "0",
                 },
             ],
         },
@@ -112,7 +127,13 @@ def test_quote_pdf_status_and_invoice_conversion(
     assert pdf.content.startswith(b"%PDF-")
 
     cannot_convert = client.post(
-        f"/api/quotes/{quote['id']}/convert", headers=auth_headers
+        f"/api/quotes/{quote['id']}/convert",
+        headers=auth_headers,
+        json={
+            "service_date": "2026-08-20",
+            "billing_confirmation_token": "not-a-valid-confirmation-token",
+            "billing_confirmed": True,
+        },
     )
     assert cannot_convert.status_code == 400
 
@@ -125,8 +146,54 @@ def test_quote_pdf_status_and_invoice_conversion(
         assert transitioned.status_code == 200
         assert transitioned.json()["status"] == status
 
+    preview = client.post(
+        f"/api/quotes/{quote['id']}/invoice-preview",
+        headers=auth_headers,
+        json={"service_date": "2026-08-20"},
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["fixed_total"] == "700.00"
+    assert preview.json()["work_total"] == "0.00"
+    assert preview.json()["travel_total"] == "0.00"
+    assert all(
+        line["actual_minutes"] is None
+        and line["billable_minutes"] is None
+        and line["minimum_minutes"] is None
+        and line["increment_minutes"] is None
+        and line["service_date"] == "2026-08-20"
+        for line in preview.json()["lines"]
+    )
+    conversion_payload = {
+        "service_date": "2026-08-20",
+        "billing_confirmation_token": preview.json()["confirmation_token"],
+        "billing_confirmed": True,
+    }
+    settings = client.get("/api/settings", headers=auth_headers).json()
+    settings["invoice_footer_note"] = "Changed after quote invoice preview"
+    for output_only in ("next_invoice_number", "next_quote_number", "has_logo"):
+        settings.pop(output_only, None)
+    assert client.put(
+        "/api/settings", headers=auth_headers, json=settings
+    ).status_code == 200
+    stale = client.post(
+        f"/api/quotes/{quote['id']}/convert",
+        headers=auth_headers,
+        json=conversion_payload,
+    )
+    assert stale.status_code == 409
+    refreshed_preview = client.post(
+        f"/api/quotes/{quote['id']}/invoice-preview",
+        headers=auth_headers,
+        json={"service_date": "2026-08-20"},
+    )
+    assert refreshed_preview.status_code == 200, refreshed_preview.text
+    conversion_payload["billing_confirmation_token"] = refreshed_preview.json()[
+        "confirmation_token"
+    ]
     converted = client.post(
-        f"/api/quotes/{quote['id']}/convert", headers=auth_headers
+        f"/api/quotes/{quote['id']}/convert",
+        headers=auth_headers,
+        json=conversion_payload,
     )
     assert converted.status_code == 200, converted.text
     assert converted.json()["status"] == "converted"
@@ -136,6 +203,9 @@ def test_quote_pdf_status_and_invoice_conversion(
     assert invoice.status_code == 200
     assert invoice.json()["quote_id"] == quote["id"]
     assert invoice.json()["line_items"][0]["project_id"] == project_id
+    assert invoice.json()["line_items"][0]["snapshot_actual_minutes"] is None
+    assert invoice.json()["line_items"][0]["snapshot_service_date"] == "2026-08-20"
+    assert invoice.json()["billing_confirmation_token"] == refreshed_preview.json()["confirmation_token"]
     assert Decimal(invoice.json()["total"]) == Decimal("700.00")
 
     deleted = client.delete(f"/api/invoices/{invoice_id}", headers=auth_headers)
@@ -169,8 +239,32 @@ def test_project_must_belong_to_quote_client(
                     "description": "Synthetic service",
                     "quantity": 1,
                     "unit_price": 10,
+                    "tax_rate": 0,
                 }
             ],
         },
     )
     assert response.status_code == 400
+
+
+def test_quote_decimal_scale_is_rejected_before_amounts_can_drift(
+    client: TestClient, auth_headers: dict[str, str]
+):
+    client_id = create_client(client, auth_headers, "Decimal Quote Client")
+    response = client.post(
+        "/api/quotes",
+        headers=auth_headers,
+        json={
+            "client_id": client_id,
+            "line_items": [
+                {
+                    "description": "Unsupported precision",
+                    "quantity": "0.001",
+                    "unit": "hours",
+                    "unit_price": "10.001",
+                    "tax_rate": "0.001",
+                }
+            ],
+        },
+    )
+    assert response.status_code == 422

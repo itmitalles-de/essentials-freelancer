@@ -20,6 +20,7 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -28,6 +29,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -41,9 +43,9 @@ fun TimeTrackingScreen(viewModel: TimeViewModel) {
     val entries by viewModel.entries.collectAsState()
     val running by viewModel.running.collectAsState()
     val elapsed by viewModel.elapsedSeconds.collectAsState()
-    var showManualDialog by remember { mutableStateOf(false) }
-    var selectedClientId by remember { mutableStateOf<Int?>(null) }
-    var timerDescription by remember { mutableStateOf("") }
+    var showManualDialog by rememberSaveable { mutableStateOf(false) }
+    var selectedClientId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var timerDescription by rememberSaveable { mutableStateOf("") }
 
     Scaffold(
         floatingActionButton = {
@@ -133,7 +135,10 @@ private fun ClientDropdown(clients: List<Client>, selectedId: Int?, onSelect: (I
             readOnly = true,
             label = { Text("Kunde") },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            modifier = Modifier
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
         )
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             clients.forEach { client ->
@@ -181,10 +186,10 @@ private fun ManualEntryDialog(
     onDismiss: () -> Unit,
     onSave: (Int, String, String, Double) -> Unit,
 ) {
-    var selectedClientId by remember { mutableStateOf<Int?>(null) }
-    var date by remember { mutableStateOf(java.time.LocalDate.now().toString()) }
-    var description by remember { mutableStateOf("") }
-    var hours by remember { mutableStateOf("") }
+    var selectedClientId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var date by rememberSaveable { mutableStateOf(java.time.LocalDate.now().toString()) }
+    var description by rememberSaveable { mutableStateOf("") }
+    var hours by rememberSaveable { mutableStateOf("") }
 
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,

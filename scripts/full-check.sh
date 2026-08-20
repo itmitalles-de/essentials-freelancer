@@ -15,6 +15,7 @@ BACKUP_CONFIG="$RUNTIME_DIR/restic.env"
 RESTIC_PASSWORD_FILE="$RUNTIME_DIR/restic-password"
 RESTIC_REPOSITORY="$RUNTIME_DIR/restic-repository"
 REVISION=$(git -C "$PROJECT_DIR" rev-parse HEAD)
+BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 ADMIN_USERNAME='admin'
 ADMIN_PASSWORD=$(python3 -c 'import secrets; print("synthetic-" + secrets.token_hex(24))')
 JWT_SECRET=$(python3 -c 'import secrets; print("synthetic-" + secrets.token_hex(32))')
@@ -140,13 +141,14 @@ write_env() {
     printf 'OFFSITE_PASSWORD_FILE_CONFIGURED=true\n'
     printf 'PROXY_NETWORK_NAME=%s\n' "$PROXY_NETWORK"
     printf 'REPOSITORY_REVISION=%s\n' "$REVISION"
+    printf 'BUILD_TIME=%s\n' "$BUILD_TIME"
   } >"$path"
 }
 
 database_counts() {
   local stack=$1
   "$stack" exec -T db psql -U tracker -d tracker -At -F '|' -c \
-    "SELECT (SELECT count(*) FROM clients), (SELECT count(*) FROM projects), (SELECT count(*) FROM time_entries), (SELECT count(*) FROM quotes), (SELECT count(*) FROM invoices), (SELECT count(*) FROM expenses), (SELECT count(*) FROM quote_catalog_items), (SELECT count(*) FROM quote_assistant_drafts), (SELECT count(*) FROM module_audit_events);" | tr -d '\r'
+    "SELECT (SELECT count(*) FROM clients), (SELECT count(*) FROM projects), (SELECT count(*) FROM time_entries), (SELECT count(*) FROM quotes), (SELECT count(*) FROM invoices), (SELECT count(*) FROM invoice_send_attempts), (SELECT count(*) FROM expenses), (SELECT count(*) FROM quote_catalog_items), (SELECT count(*) FROM quote_assistant_drafts), (SELECT count(*) FROM module_audit_events);" | tr -d '\r'
 }
 
 run_browser_e2e() {
@@ -173,6 +175,7 @@ write_env "$TARGET_ENV" "$TARGET_PROJECT" "$TARGET_DB_PASSWORD" "$TARGET_FRONTEN
 printf 'full-check: backend tests and migration regression\n'
 docker build --target test -t "freelancer-backend-test:$RUN_ID" "$PROJECT_DIR/backend"
 docker run --rm "freelancer-backend-test:$RUN_ID"
+docker run --rm "freelancer-backend-test:$RUN_ID" python -m pip_audit -r requirements.txt
 
 printf 'full-check: frontend unit tests, production build, and dependency audit\n'
 (
@@ -193,20 +196,30 @@ if [ -z "${ANDROID_HOME:-}" ] && [ -d /home/tim/.cache/codex-toolchains/android-
 fi
 (
   cd "$PROJECT_DIR/android"
-  ./gradlew --no-daemon testDebugUnitTest assembleDebug
+  ./gradlew --no-daemon testDebugUnitTest assembleDebug assembleDebugAndroidTest
 )
 
 printf 'full-check: Compose, shell, fixture syntax, and secret checks\n'
 source_compose config -q
 bash -n "$PROJECT_DIR"/scripts/*.sh
 python3 -m py_compile \
+  "$PROJECT_DIR/scripts/collect-deployment-state.py" \
+  "$PROJECT_DIR/scripts/generate-pilot-sbom.py" \
+  "$PROJECT_DIR/tests/full-check/deployment_evidence_check.py" \
   "$PROJECT_DIR/tests/full-check/api_flow.py" \
+  "$PROJECT_DIR/tests/full-check/postgres_migration_copy.py" \
   "$PROJECT_DIR/tests/full-check/smtp-fixture/smtp_fixture.py"
 "$PROJECT_DIR/scripts/check-secrets.sh"
+python3 "$PROJECT_DIR/scripts/generate-pilot-sbom.py" \
+  --output "$RUNTIME_DIR/pilot-sbom.cdx.json" \
+  --revision "$REVISION"
+python3 -c 'import json,sys; b=json.load(open(sys.argv[1], encoding="utf-8")); assert b["bomFormat"] == "CycloneDX" and b["specVersion"] == "1.6" and len(b["components"]) > 20' \
+  "$RUNTIME_DIR/pilot-sbom.cdx.json"
 docker run --rm \
   -v "$PROJECT_DIR:/src:ro" \
   -w /src \
-  koalaman/shellcheck-alpine:v0.10.0 sh -c 'shellcheck scripts/*.sh'
+  koalaman/shellcheck-alpine:v0.10.0@sha256:5921d946dac740cbeec2fb1c898747b6105e585130cc7f0602eec9a10f7ddb63 \
+  sh -c 'shellcheck scripts/*.sh'
 
 if command -v google-chrome >/dev/null 2>&1; then
   PLAYWRIGHT_BROWSER=$(command -v google-chrome)
@@ -216,6 +229,15 @@ else
   (cd "$PROJECT_DIR/frontend" && npx playwright install chromium)
 fi
 
+printf 'full-check: populated PostgreSQL 0006 database-copy upgrade to 0007\n'
+source_compose up -d --wait db
+source_compose build backend
+source_compose run --rm --no-deps \
+  -e "MIGRATION_ADMIN_DATABASE_URL=postgresql://tracker:$SOURCE_DB_PASSWORD@db:5432/postgres" \
+  -e "MIGRATION_RUN_ID=$RUN_ID" \
+  -v "$PROJECT_DIR/tests/full-check:/full-check:ro" \
+  backend python /full-check/postgres_migration_copy.py
+
 printf 'full-check: start disposable source stack\n'
 docker network create "$PROXY_NETWORK" >/dev/null
 source_compose up -d --build db smtp-fixture backend frontend
@@ -224,7 +246,7 @@ SOURCE_SMTP_URL="http://127.0.0.1:$SOURCE_SMTP_HTTP_PORT"
 poll_url "$SOURCE_BASE_URL/api/ready" 'source readiness'
 poll_url "$SOURCE_SMTP_URL/health" 'SMTP fixture'
 
-printf 'full-check: API, PDF, SMTP, module, and receipt acceptance flow\n'
+printf 'full-check: API, PDF, billing, SMTP-lock, module, and receipt acceptance flow\n'
 python3 "$PROJECT_DIR/tests/full-check/api_flow.py" \
   --base-url "$SOURCE_BASE_URL" \
   --username "$ADMIN_USERNAME" \
@@ -248,6 +270,21 @@ DIRECT_EXPORT=$(find "$DIRECT_EXPORT_ROOT" -mindepth 1 -maxdepth 1 -type d -name
 (cd "$DIRECT_EXPORT" && sha256sum --check --quiet SHA256SUMS)
 grep -Fx "repository_commit=$REVISION" "$DIRECT_EXPORT/MANIFEST.txt" >/dev/null || die 'direct export revision mismatch'
 grep -Fx 'secrets_included=no' "$DIRECT_EXPORT/MANIFEST.txt" >/dev/null || die 'direct export secret declaration missing'
+poll_url "$SOURCE_BASE_URL/api/ready" 'source readiness after direct export'
+
+printf 'full-check: redacted deployment evidence in JSON and Markdown\n'
+DEPLOYMENT_EVIDENCE="$RUNTIME_DIR/deployment-evidence"
+"$PROJECT_DIR/scripts/collect-deployment-state.sh" \
+  --output-dir "$DEPLOYMENT_EVIDENCE" \
+  --project-dir "$PROJECT_DIR" \
+  --env-file "$SOURCE_ENV" \
+  --compose-file "$PROJECT_DIR/docker-compose.yml" \
+  --compose-file "$PROJECT_DIR/docker-compose.full-check.yml" \
+  --backup-root "$DIRECT_EXPORT_ROOT" \
+  --public-url "$SOURCE_BASE_URL"
+python3 "$PROJECT_DIR/tests/full-check/deployment_evidence_check.py" \
+  "$DEPLOYMENT_EVIDENCE/deployment-state.json" "$SOURCE_ENV"
+test -s "$DEPLOYMENT_EVIDENCE/deployment-state.md" || die 'deployment Markdown is empty'
 
 printf 'full-check: encrypted local restic backup and restore rehearsal\n'
 umask 077
@@ -260,7 +297,14 @@ OFFSITE_EXPORT_ROOT="$RUNTIME_DIR/offsite-exports"
   printf 'FREELANCER_ENV_FILE=%s\n' "$SOURCE_ENV"
   printf 'LOCAL_EXPORT_ROOT=%s\n' "$OFFSITE_EXPORT_ROOT"
   printf 'RESTIC_KEEP_DAILY=1\nRESTIC_KEEP_WEEKLY=1\nRESTIC_KEEP_MONTHLY=1\n'
+  printf 'RESTIC_APPLY_RETENTION=true\n'
 } >"$BACKUP_CONFIG"
+printf 'full-check: read-only restic target inventory\n'
+FREELANCER_BACKUP_CONFIG="$BACKUP_CONFIG" \
+  "$PROJECT_DIR/scripts/offsite-backup.sh" --inventory-only \
+  >"$RUNTIME_DIR/restic-inventory.json"
+python3 -c 'import json,sys; assert json.load(open(sys.argv[1], encoding="utf-8"))["snapshot_count"] == 0' \
+  "$RUNTIME_DIR/restic-inventory.json"
 printf 'full-check: disabled offsite job is rejected by module enforcement\n'
 if COMPOSE_PROJECT_NAME="$SOURCE_PROJECT" \
   FREELANCER_BACKUP_CONFIG="$BACKUP_CONFIG" \
