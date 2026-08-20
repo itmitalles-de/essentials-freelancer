@@ -17,18 +17,22 @@ The controlled first-internal-use boundary and its exit criteria are frozen in
 
 ## Verified product scope
 
-- clients with contact data and individual hourly rates;
-- projects linked to exactly one client, with an optional project rate;
-- manual time entries and one global start/stop timer;
+- clients with private/business/custom billing profiles, standard rates, and
+  optional service-mode defaults;
+- projects linked to exactly one client, with tariff/rate overrides, default
+  remote/onsite mode, and individual-project classification;
+- manual time entries and one global start/stop timer, with separate actual and
+  billable work/travel minutes and applied-policy evidence;
 - traceable client → project → time → invoice relationships;
 - quotes with line items, PDF, controlled status transitions, and one-time
   conversion of an accepted quote into a draft invoice;
 - a deterministic, optional quote assistant with versioned catalog prices,
   packages, templates, transparent Decimal calculations, immutable snapshots,
   and mandatory human approval;
-- invoices generated from unbilled time or an accepted quote, with PDF,
-  explicit tax selection, review-gated/idempotent SMTP delivery, redacted send
-  evidence, and controlled draft/sent/paid/cancelled states;
+- invoices generated from unbilled time or an accepted fixed-price quote only
+  after a visible billing preview and explicit confirmation, with
+  immutable line snapshots, PDF, explicit tax selection, manual delivery
+  confirmation, and controlled draft/sent/paid/cancelled states;
 - expenses with PNG, JPEG, or PDF receipts up to 5 MiB;
 - company settings, logo, numbering prefixes, and a configurable invoice
   footer;
@@ -41,15 +45,17 @@ The controlled first-internal-use boundary and its exit criteria are frozen in
   status handling;
 - consistent PostgreSQL/document export and empty-target restore tooling.
 
-The application does not infer tax status. A fresh installation has a blank
-invoice footer and requires explicit tax rates. Migration `0006` removes only
-the exact formerly generated small-business sentence while preserving custom
-operator text. Defaults and checklists are not tax or legal advice; see
+The application does not infer tax status. The operator can explicitly select
+0 percent and enable operator-approved § 19 UStG text; the notice is never
+inferred. Existing PDFs and custom footer text remain unchanged. The exact
+billing rules and migration behavior are documented in
+[`docs/BILLING_POLICY.md`](docs/BILLING_POLICY.md). Defaults and checklists are
+not tax or legal advice; see
 [`docs/operations/INVOICE_OPERATOR_CHECKLIST.md`](docs/operations/INVOICE_OPERATOR_CHECKLIST.md).
 
 ## Architecture and persistence
 
-- Backend: FastAPI, SQLAlchemy, Alembic, ReportLab, SMTP
+- Backend: FastAPI, SQLAlchemy, Alembic, ReportLab; dormant SMTP compatibility code is pilot-locked
 - Frontend: React, Vite, TypeScript
 - Android: Kotlin, Jetpack Compose
 - Database: PostgreSQL 16
@@ -86,15 +92,20 @@ legacy schema only for a new empty database. Later migrations add projects and
 quotes (`0002`), module state/audit data (`0003`), versioned quote-assistant
 snapshots (`0004`), and operational constraints, indexes, and idempotency keys
 (`0005`). Pilot safety migration `0006` adds invoice-send attempt evidence and
-removes the known inferred tax footer without renaming compatibility objects. Take a verified
-business-data export before deploying a migration.
+removes the known inferred tax footer without renaming compatibility objects.
+Billing migration `0007` adds configurable 50/75/30 deployment tariffs,
+minimum/increment rules, explicit tax-profile settings, legacy-profile
+confirmation gates, and immutable invoice snapshots without recalculating old
+rows or documents. Take a verified business-data export before deploying a
+migration.
 
-SMTP is optional. Without `SMTP_HOST` and `SMTP_FROM`, invoice creation and PDF
-download remain available while the send endpoint returns a clear configuration
-error and leaves the invoice in draft state. Sending requires the PDF to be
-opened first and a separate accessible confirmation of recipient, invoice
-number, amount, external delivery, and review. First send and resend are
-distinct idempotent actions; payment is always a separate deliberate action.
+SMTP is server-locked off for this pilot even when runtime SMTP variables are
+present. Invoice creation, PDF review, and download remain available; the
+operator sends the reviewed PDF through the normal external mail account and
+then explicitly records manual delivery. The application performs no SMTP call
+and creates no send-attempt row. Future activation requires the complete
+crash-safe contract in
+[`docs/operations/SMTP_ACCEPTANCE.md`](docs/operations/SMTP_ACCEPTANCE.md).
 
 ## Backup and restore
 
@@ -116,6 +127,9 @@ in the recovery guide.
 
 - [`docs/PILOT_RUNBOOK.md`](docs/PILOT_RUNBOOK.md) is the controlled 22-step
   synthetic and first-use flow.
+- [`docs/INTERNAL_DEPLOYMENT_PLAN.md`](docs/INTERNAL_DEPLOYMENT_PLAN.md) is the
+  exact-SHA Compose deployment/backup/restore plan and records the missing-host
+  stop condition.
 - [`docs/operations/SMTP_ACCEPTANCE.md`](docs/operations/SMTP_ACCEPTANCE.md)
   separates the local fixture from the externally gated real-provider test.
 - `scripts/collect-deployment-state.sh` writes secret-safe JSON and Markdown
@@ -140,7 +154,8 @@ It creates random synthetic credentials, Compose project names, ports, volumes,
 and an isolated proxy network. It runs backend and migration tests, frontend
 tests/build/audit, Android JVM tests and app/instrumentation APK assembly,
 Python/npm dependency audits, Compose/static/full-history secret checks, SBOM
-and deployment-evidence checks, the complete API/PDF/SMTP flow, Playwright navigation and axe checks,
+and deployment-evidence checks, the complete API/PDF/billing/SMTP-lock flow,
+an upgrade of a populated PostgreSQL `0006` database copy, Playwright navigation and axe checks,
 business export, an encrypted local restic snapshot, and restore into a second
 empty Compose installation. Database counts, document checksums, schema and
 repository revisions, restored APIs, and restored browser views are compared.
@@ -155,9 +170,10 @@ CI also runs the committed instrumentation smoke on an API-35 emulator against
 an isolated stack containing only `TESTKUNDE`, `TESTPROJEKT`, `TESTANGEBOT`,
 `TESTRECHNUNG`, and `NICHT BUCHEN`. Release signing is intentionally external.
 
-SMTP and offsite storage in `make full-check` are local simulators. A green run
-does not prove delivery by a real SMTP provider, recoverability from a real
-remote restic target, public proxy/DNS/TLS, or the revision deployed in
-production. See [`docs/VERIFICATION_MATRIX.md`](docs/VERIFICATION_MATRIX.md).
+The SMTP fixture in `make full-check` is configured only to prove that the pilot
+lock emits no message. Local offsite storage is a simulator. A green run does
+not prove manual mail delivery, recoverability from a real remote restic target,
+public proxy/DNS/TLS, or the revision deployed in production. See
+[`docs/VERIFICATION_MATRIX.md`](docs/VERIFICATION_MATRIX.md).
 The current truth for the pilot is recorded without promotion claims in
 [`docs/PILOT_BASELINE.md`](docs/PILOT_BASELINE.md).

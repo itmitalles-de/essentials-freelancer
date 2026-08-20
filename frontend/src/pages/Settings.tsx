@@ -102,7 +102,27 @@ export function Settings() {
         <textarea placeholder={t("settings.footerNote")} value={settings.invoice_footer_note} onChange={set("invoice_footer_note")} />
         <input placeholder={t("settings.invoiceNumberPrefix")} value={settings.invoice_number_prefix} onChange={set("invoice_number_prefix")} />
         <input placeholder={t("settings.quoteNumberPrefix")} value={settings.quote_number_prefix} onChange={set("quote_number_prefix")} />
-        <input placeholder={t("settings.defaultHourlyRate")} value={settings.default_hourly_rate} onChange={set("default_hourly_rate")} />
+        <fieldset style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+          <legend>{t("settings.billingProfile")}</legend>
+          <label>{t("settings.privateRate")} <input type="number" min="0" step="0.01" value={settings.private_hourly_rate} onChange={set("private_hourly_rate")} /></label>
+          <label>{t("settings.businessRate")} <input type="number" min="0" step="0.01" value={settings.business_hourly_rate} onChange={set("business_hourly_rate")} /></label>
+          <label>{t("settings.travelRate")} <input type="number" min="0" step="0.01" value={settings.travel_hourly_rate} onChange={set("travel_hourly_rate")} /></label>
+          <label>{t("settings.firstOrderMinimum")} <input type="number" min="0" value={settings.first_order_minimum_minutes} onChange={(e) => setSettings({ ...settings, first_order_minimum_minutes: Number(e.target.value) })} /></label>
+          <label>{t("settings.onsiteMinimum")} <input type="number" min="0" value={settings.onsite_minimum_minutes} onChange={(e) => setSettings({ ...settings, onsite_minimum_minutes: Number(e.target.value) })} /></label>
+          <label>{t("settings.remoteIncrement")} <input type="number" min="1" value={settings.remote_increment_minutes} onChange={(e) => setSettings({ ...settings, remote_increment_minutes: Number(e.target.value) })} /></label>
+          <label>{t("settings.travelMinimum")} <input type="number" min="0" value={settings.travel_minimum_minutes} onChange={(e) => setSettings({ ...settings, travel_minimum_minutes: Number(e.target.value) })} /></label>
+          <label>{t("settings.travelIncrement")} <input type="number" min="1" value={settings.travel_increment_minutes ?? ""} onChange={(e) => setSettings({ ...settings, travel_increment_minutes: e.target.value === "" ? null : Number(e.target.value) })} /></label>
+        </fieldset>
+        <fieldset style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+          <legend>{t("settings.taxProfile")}</legend>
+          <label>{t("settings.defaultTaxRate")} <input type="number" min="0" max="100" step="0.01" value={settings.default_tax_rate} onChange={set("default_tax_rate")} /></label>
+          <label style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+            <input type="checkbox" checked={settings.small_business_notice_enabled} onChange={(e) => setSettings({ ...settings, small_business_notice_enabled: e.target.checked })} />
+            {t("settings.smallBusinessEnabled")}
+          </label>
+          <textarea placeholder={t("settings.smallBusinessText")} value={settings.small_business_notice_text} onChange={set("small_business_notice_text")} />
+          <div style={{ color: "var(--fg-muted)", fontSize: "0.85rem" }}>{t("settings.taxProfileHint")}</div>
+        </fieldset>
         <input
           placeholder={t("settings.paymentTerms")}
           type="number"

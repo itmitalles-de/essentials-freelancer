@@ -12,7 +12,7 @@ navigation map, not a duplicate specification.
 
 - **Backend (`backend/`)**: FastAPI routers expose `/api`; SQLAlchemy models and
   Alembic migrations own persistence; ReportLab creates invoice/quote PDFs;
-  SMTP sends invoice attachments when configured.
+  the SMTP route remains unreachable behind the first-pilot lock.
 - **Web (`frontend/`)**: React/Vite/TypeScript SPA for all main product areas.
   Its Nginx runtime serves static assets and proxies `/api/` to `backend:8000`.
 - **Android (`android/`)**: Compose client using Retrofit. It stores the server
@@ -23,8 +23,9 @@ navigation map, not a duplicate specification.
 - **Operations (`scripts/`, `deploy/`)**: smoke testing, secret scanning,
   read-only deployment evidence, consistent export/restore, encrypted offsite
   upload, CycloneDX pilot SBOM generation, and optional systemd scheduling.
-- **Acceptance (`tests/full-check/`, `frontend/e2e/`)**: generated-data API/PDF
-  and SMTP fixtures plus Playwright/axe and deployment-evidence checks
+- **Acceptance (`tests/full-check/`, `frontend/e2e/`)**: generated-data
+  API/PDF/billing and zero-message SMTP-lock fixtures plus Playwright/axe,
+  populated prior-schema-copy migration, and deployment-evidence checks
   orchestrated by `make full-check`; `tests/android-smoke/` seeds the dedicated
   API-35 workflow.
 
@@ -39,7 +40,8 @@ Core business relationships are implemented in `backend/app/models.py`:
 
 - each project belongs to one client;
 - time entries belong to a client and optionally a project;
-- invoices link billed time entries and immutable line-item amounts;
+- invoices link billed time entries and immutable line-item billing-policy,
+  project/date/duration/rate/tax/amount snapshots;
 - quotes belong to a client/project and can create one linked draft invoice;
 - expenses may reference uploaded receipts;
 - singleton company settings own prefixes, counters, defaults, and logo path.
@@ -47,24 +49,27 @@ Core business relationships are implemented in `backend/app/models.py`:
   feature state; manifests themselves remain version-controlled code;
 - quote-assistant catalogs, versions, packages, templates, drafts, and line/tax
   snapshots retain deterministic inputs independently of later catalog edits;
-- invoice-send attempts retain idempotency, resend intent, outcome, timestamps,
-  and only redacted message evidence without storing credentials or headers.
+- legacy invoice-send attempts remain retained evidence, but no new attempt can
+  be created while the first-pilot SMTP module is locked.
 
-Invoicing from time locks selected entries, rejects running/already-billed or
-cross-client entries, rounds the visible hour quantity with Decimal/ROUND_HALF_UP
-and calculates amounts from that same value, links entries to the invoice, and
-generates its PDF in one transaction boundary. PDF failure rolls database state
-back and removes the expected file. Deleting an unsent draft unbills its time;
-sent/paid/cancelled documents cannot follow that path. Quote conversion uses
-row locks and unique links to prevent duplicate conversion.
+The billing-policy service resolves configurable client/project rates and
+service modes when time is recorded. It stores actual/billable work and travel
+minutes, minima, increments, reasons and a policy ID. Invoicing from time first
+returns an exact preview and confirmation token. Creation locks selected
+entries, rejects running/already-billed/cross-client/stale-preview requests,
+calculates money directly from billable minutes with Decimal cent rounding,
+snapshots every decision, links entries, and generates its PDF in one
+transaction boundary. PDF failure rolls database state back and removes the
+expected file. Deleting an unsent draft unbills its time; sent/paid/cancelled
+documents cannot follow that path. Quote conversion uses row locks and unique
+links to prevent duplicate conversion and never creates time for quote work.
 
-Invoice email is an operator command, not an automatic lifecycle hook. The web
-client first opens the PDF, then requires an accessible confirmation with the
-recipient, number, amount, external-email warning, and review attestation. The
-API validates those values and a required idempotency key. It distinguishes a
-first send from an explicit resend, preserves the original `sent_at`, and leaves
-the prior invoice state intact on failure. SMTP absence never blocks document
-creation.
+SMTP is forced to `disabled` by migration, registry reconciliation, module
+enable guard and route guard. Even configured runtime SMTP values cannot emit a
+message. The web client opens/downloads the PDF and records `sent` only after
+the operator explicitly attests PDF review and completed manual external
+delivery. This never sets `paid`. Future SMTP activation requires the complete
+`send_unknown` crash-safety contract in `docs/operations/SMTP_ACCEPTANCE.md`.
 
 Protected routers call the module guard after authentication. Optional
 navigation is derived from the same authenticated module catalog. Host-side
@@ -125,19 +130,20 @@ sensitive. Homer assets are public to the browser and may contain no secrets.
 
 ## Testing
 
-- `backend/tests/`: 48 auth/business/module/assistant/reporting/security/schema
-  tests, including migration, invoice rounding/numbering, PDF/footer,
-  cancellation and send idempotency/failure behavior.
-- `frontend/tests/`: 9 component/API/calculation/send-confirmation tests plus
+- `backend/tests/`: auth/business/module/assistant/reporting/security/schema
+  tests, including billing-rule matrices, migration/history preservation,
+  invoice rounding/numbering/snapshots, PDF/footer and SMTP-lock behavior.
+- `frontend/tests/`: 9 component/API test files with 11 tests plus
   TypeScript/Vite build validation; `frontend/e2e/` covers authenticated module
   navigation, restored data, and axe accessibility checks.
 - `android/app/src/test/`: 3 JVM tests including authenticated-client cache
   behavior; CI assembles both app and instrumentation APKs.
 - `android/app/src/androidTest/`: API-35 Compose smoke for the authenticated
   synthetic pilot flow and Activity recreation.
-- `tests/full-check/`: complete generated API/PDF/SMTP flow, PostgreSQL
-  concurrency, deployment-evidence redaction and a programmable local SMTP
-  fixture.
+- `tests/full-check/`: complete generated API/PDF/billing/SMTP-lock flow,
+  PostgreSQL concurrency, a populated `0006` database-copy upgrade,
+  deployment-evidence redaction and a programmable local SMTP fixture that
+  must remain empty.
 - `scripts/full-check.sh`: random disposable source/restore stacks, export,
   encrypted local restic snapshot/restore, count/checksum/revision comparison,
   and reliable cleanup.
@@ -145,7 +151,7 @@ sensitive. Homer assets are public to the browser and may contain no secrets.
   same full acceptance target, SBOM artifact, and API-35 emulator smoke. All
   external Actions are pinned to full commit SHAs.
 
-No automated repository test proves a real SMTP provider, remote offsite
+No automated repository test proves manual mail delivery, remote offsite
 storage, public proxy/DNS/TLS, production data, deployed revision, or Android
 release signing.
 
@@ -155,7 +161,7 @@ release signing.
 - Do not infer production state from Compose or CI.
 - Do not downgrade the legacy baseline on real data; restore a verified export.
 - Preserve billing invariants summarized in `.agent/DECISIONS.md`.
-- Do not infer tax status or send email without explicit operator review.
-- Do not describe CI/local fixtures as deployed, real-SMTP, or real-offsite
+- Do not infer tax status or enable SMTP without the complete crash-safe contract.
+- Do not describe CI/local fixtures as deployed, manually delivered, or real-offsite
   evidence.
 - Demand-load only the router/page/client involved in the current task.

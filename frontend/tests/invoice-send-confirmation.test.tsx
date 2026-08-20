@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,7 +12,6 @@ vi.mock("../src/api", () => ({
   ApiError: class ApiError extends Error {},
   api: {
     get: vi.fn(),
-    postIdempotent: vi.fn(),
     put: vi.fn(),
     delete: vi.fn(),
   },
@@ -66,14 +65,14 @@ describe("safe invoice delivery", () => {
       throw new Error(`Unexpected GET ${path}`);
     });
     vi.mocked(openInvoicePdf).mockResolvedValue(undefined);
-    vi.mocked(api.postIdempotent).mockResolvedValue({
+    vi.mocked(api.put).mockResolvedValue({
       ...invoice,
       status: "sent",
       sent_at: "2026-08-19T10:01:00",
     });
   });
 
-  it("requires a PDF review and an accessible detail confirmation", async () => {
+  it("requires a PDF review and explicit manual delivery confirmation", async () => {
     const user = userEvent.setup();
     render(
       <LanguageProvider>
@@ -85,42 +84,37 @@ describe("safe invoice delivery", () => {
       </LanguageProvider>
     );
 
-    const sendButton = await screen.findByRole("button", { name: "Per E-Mail senden" });
+    const deliveryButton = await screen.findByRole("button", { name: "Manuelle externe Zustellung bestätigen" });
     expect(screen.getByText("19.00 %")).toBeInTheDocument();
-    expect(screen.getByText("19.00 €")).toBeInTheDocument();
-    expect(sendButton).toBeDisabled();
+    expect(screen.getAllByText("19.00 €")).toHaveLength(2);
+    expect(deliveryButton).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "PDF öffnen" }));
     expect(openInvoicePdf).toHaveBeenCalledWith(7, "RE-2026-0007");
-    await waitFor(() => expect(sendButton).toBeEnabled());
-    await user.click(sendButton);
+    await waitFor(() => expect(deliveryButton).toBeEnabled());
+    await user.click(deliveryButton);
 
     const dialog = screen.getByRole("dialog", {
-      name: "Externen Rechnungsversand bestätigen",
+      name: "Manuell zugestellte Rechnung bestätigen",
     });
-    expect(dialog).toHaveTextContent("billing@example.invalid");
-    expect(dialog).toHaveTextContent("RE-2026-0007");
-    expect(dialog).toHaveTextContent("119.00 €");
-    expect(dialog).toHaveTextContent("Diese Aktion sendet eine externe E-Mail");
+    expect(dialog).toHaveTextContent("SMTP-Versand und automatischer Wiederversand sind deaktiviert");
+    expect(dialog).toHaveTextContent("manuelle externe Zustellung");
 
-    const confirmButton = screen.getByRole("button", { name: "Externe E-Mail senden" });
+    const confirmButton = within(dialog).getByRole("button", { name: "Manuelle externe Zustellung bestätigen" });
     expect(confirmButton).toBeDisabled();
     await user.click(
       screen.getByRole("checkbox", {
-        name: /Ich habe dieses Rechnungs-PDF geprüft/,
+        name: /Ich habe das PDF geprüft und bestätige bewusst die manuelle externe Zustellung/,
       })
     );
     await user.click(confirmButton);
 
     await waitFor(() =>
-      expect(api.postIdempotent).toHaveBeenCalledWith(
-        "/invoices/7/send",
-        expect.any(String),
+      expect(api.put).toHaveBeenCalledWith(
+        "/invoices/7/status",
         {
-          recipient: "billing@example.invalid",
-          invoice_number: "RE-2026-0007",
-          total: "119.00",
+          status: "sent",
           pdf_reviewed: true,
-          resend: false,
+          manual_delivery_confirmed: true,
         }
       )
     );

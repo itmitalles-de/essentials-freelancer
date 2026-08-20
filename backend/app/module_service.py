@@ -7,6 +7,7 @@ from app.models import ModuleAuditEvent, ModuleInstallation
 from app.module_registry import (
     MODULES,
     MODULE_BY_ID,
+    PILOT_LOCKED_MODULES,
     ModuleHealth,
     ModuleManifest,
     ModuleState,
@@ -50,7 +51,11 @@ def reconcile_module_installations(db: Session) -> None:
             changed = True
 
         current = ModuleState(installation.state)
-        if manifest.required and current != ModuleState.enabled:
+        if manifest.id in PILOT_LOCKED_MODULES and current != ModuleState.disabled:
+            installation.state = ModuleState.disabled.value
+            installation.updated_at = utc_now_naive()
+            changed = True
+        elif manifest.required and current != ModuleState.enabled:
             installation.state = ModuleState.enabled.value
             installation.updated_at = utc_now_naive()
             changed = True
@@ -142,6 +147,19 @@ def list_module_statuses(db: Session) -> list[ModuleStatus]:
 
 
 def ensure_module_available(db: Session, module_id: str) -> ModuleInstallation:
+    if module_id in PILOT_LOCKED_MODULES:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "pilot_module_locked",
+                "message": (
+                    "SMTP ist für den internen Pilot deaktiviert. "
+                    "Rechnungs-PDF manuell herunterladen und versenden."
+                ),
+                "module_id": module_id,
+                "state": ModuleState.disabled.value,
+            },
+        )
     status = module_status(db, module_id)
     if status.state != ModuleState.enabled:
         raise HTTPException(
@@ -177,6 +195,18 @@ def _audit(
 
 def enable_module(db: Session, module_id: str, actor: str) -> ModuleStatus:
     manifest = _manifest_or_404(module_id)
+    if module_id in PILOT_LOCKED_MODULES:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "pilot_module_locked",
+                "message": (
+                    "SMTP bleibt deaktiviert, bis der crash-sichere Versandvertrag "
+                    "vollständig implementiert und getestet ist."
+                ),
+                "module_id": module_id,
+            },
+        )
     installation = _installation(db, module_id, lock=True)
     previous = ModuleState(installation.state)
 

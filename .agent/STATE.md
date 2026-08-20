@@ -2,116 +2,86 @@
 
 ## Pilot boundary
 
-Essentials+ Freelancer remains one installation for exactly one administrator.
-Its pilot scope is clients, projects, time, quotes, invoice drafts, expenses,
-CSV reports, and complete backup/restore. The feature freeze and hard non-goals
-are authoritative in `docs/PILOT_SCOPE.md`; new ideas go only to
-`docs/NICE_TO_HAVE.md` and receive no stubs or dormant schema/UI.
+Essentials+ Freelancer is one Docker Compose installation for exactly one
+administrator. The frozen pilot scope is clients, projects, time, quotes,
+invoices, expenses, reports, and complete backup/restore. It is not SaaS,
+multi-tenant, team-oriented, or Kubernetes-based. `docs/PILOT_SCOPE.md` is the
+authoritative boundary.
 
-Visible product/repository naming is `Essentials+ Freelancer` and
-`itmitalles-de/essentials-freelancer`. PostgreSQL database/user `tracker`,
-volumes `tracker_db_data`/`tracker_invoices`, browser storage keys, Android
-package `de.itmitalles.tracker`, and migration names remain deliberate
-compatibility identifiers. See `docs/COMPATIBILITY_IDENTIFIERS.md`.
+Visible naming is `Essentials+ Freelancer` and
+`itmitalles-de/essentials-freelancer`. Legacy `tracker` database, volume,
+browser-storage, Android-package, and migration identifiers remain deliberate
+compatibility IDs; see `docs/COMPATIBILITY_IDENTIFIERS.md`.
 
-## Workstream
+## Billing-policy release
 
-- Starting/default revision: `master` / `origin/master` at
-  `10ce63ca50c9fdd83e06f570dcc2acd41394afb5`.
-- Active branch: `pilot/freelancer-first-internal-use`.
-- No matching active branch or Draft PR existed at start. Draft PR #3 is now
-  open for review and remains unmerged.
-- Initial unchanged `make full-check` passed; exact tools/results are recorded
-  in `docs/PILOT_BASELINE.md`.
-- No production data, receipt, PDF, credential, SMTP account, offsite target,
-  deployment host, or signing key was supplied or read.
+PR #3 on branch `pilot/freelancer-first-internal-use` is the only pilot PR and
+the authoritative GitHub record for exact-head CI, API-35, review, squash merge,
+and the resulting `master` commit.
 
-## Implemented pilot controls
+Migration `0007_billing_policy` implements an explicit configurable policy:
 
-- Pilot scope/freeze, compatibility-name boundary, 22-step runbook, invoice
-  operator checklist, SMTP acceptance gate, backup/restore contract, GitHub
-  settings evidence, and verification matrix.
-- Explicit invoice/quote tax input; blank fresh-install tax footer; migration
-  `0006_pilot_safety` removes only the exact legacy generated footer while
-  preserving custom text.
-- Time-invoice visible quantities are rounded first with Decimal/ROUND_HALF_UP;
-  line totals derive from that same printed quantity. Invoice number allocation
-  is tested concurrently on PostgreSQL.
-- Invoice delivery requires a previously opened PDF plus an accessible
-  confirmation containing recipient, invoice number, amount, and external-mail
-  warning. SMTP remains optional; first send and resend are deliberate and use
-  required idempotency keys. Redacted send-attempt evidence records success or
-  safe failure without changing a draft/sent invoice incorrectly.
-- `/api/meta` exposes only product version, repository revision, schema version,
-  build time, and readiness. `/api/ready` is the Compose health gate.
-- `scripts/collect-deployment-state.sh` performs a read-only, secret-redacted
-  runtime inspection and emits mode-0600 JSON plus Markdown.
-- Complete export still treats PostgreSQL and the document volume as one unit.
-  Offsite retention is dry-run by default; inventory, encrypted upload, check,
-  redacted snapshot evidence, and isolated restore are documented.
-- Android login no longer poisons the authenticated Retrofit cache. A debug-only
-  API-35 instrumentation flow covers login, timer/list actions, client/invoice
-  views, PDF open/download, deliberate paid status, and Activity recreation
-  against exact synthetic seed objects.
-- External GitHub Actions use reviewed commit SHAs; container bases use image
-  digests; Gradle verifies dependencies and wrapper distribution; Python/npm
-  audits, a history-aware secret scan, CODEOWNERS, and a CycloneDX pilot SBOM
-  are part of repository/CI checks.
+- private 50.00 EUR/hour, business/individual project 75.00 EUR/hour, travel
+  30.00 EUR/hour in Tim's operator settings;
+- 60-minute first-order and onsite/travel-associated work minima;
+- 15-minute upward increments only for remote follow-up work without travel;
+- separate 30-minute travel minimum and no travel rounding above it unless an
+  increment is explicitly configured;
+- client/project profiles, resolved time-entry decisions, visible exact-token
+  invoice previews, immutable invoice-line/tax/footer snapshots, and stored PDFs;
+- quote preparation creates no time and fixed-price conversion has its own
+  service-date preview and confirmation gate;
+- explicit 0-percent/§ 19 operator configuration without inferred tax status.
 
-## Evidence status
+The migration is additive. Existing client rates become unconfirmed custom
+profiles; project profiles remain unconfirmed; prior time duration/rate is
+preserved under neutral legacy markers; old snapshot facts remain null rather
+than invented. Invoice numbers, totals, lines, PDF paths, and PDF bytes remain
+unchanged. Unbilled legacy time must pass profile review and a new visible
+preview before invoicing.
 
-- **Implemented:** all controls above.
-- **Synthetically tested locally:** focused backend (48), frontend (9), Android
-  JVM (3) and APK assembly checks; complete Compose API/PDF/SMTP-fixture/export/
-  local-Restic/isolated-restore/browser/axe/deployment-evidence/cleanup flow
-  passed from clean commit
-  `9da1efaa7889ff53ef37dcf8a512921335ffc4c9`. The final unchanged
-  `make full-check` repeat left no disposable containers, volumes, or networks.
-  Exact results are in
-  `docs/PILOT_BASELINE.md`.
-- **Tested in CI:** yes; Draft PR #3 run `32207844740` passed all six jobs at
-  the final code-bearing commit, including the unchanged full check.
-- **Tested on API-35 emulator:** yes; the dedicated CI job booted an API-35
-  emulator and passed login, protected lists, timer start/stop, PDF
-  open/download, deliberate paid transition, Activity recreation, and cleanup
-  against the synthetic stack.
-- **Tested with real SMTP:** no; external gate.
-- **Tested with a real offsite target:** no; external gate.
-- **Productively deployed:** no evidence; external gate.
-- **Unknown:** actual target revision/images/volumes/backup age/proxy/TLS and
-  authorized real-data behavior.
+## SMTP safety
 
-Python runtime requirements are directly pinned and the resolved environment is
-audited during each build, but transitive packages are not hash-locked. The
-pilot therefore treats a reviewed image ID/digest as the deployable artifact and
-does not infer that a later rebuild is byte-identical. Gradle verification is an
-integrity control, not a vulnerability-feed result.
+`communication.smtp` is forced disabled by migration, registry reconciliation,
+module enable guard, send-route guard, and UI. The application does not claim an
+email was sent. The first pilot uses PDF generation, manual review/download,
+external sending through the operator's normal account, and a deliberate
+manual-delivery status. Future SMTP activation requires the complete durable
+`pending`/`sent`/`failed`/`send_unknown` crash contract in
+`docs/operations/SMTP_ACCEPTANCE.md`; partial hardening is not accepted.
 
-## Schema and recovery
+## Verification
 
-Migrations `0001` through `0005` retain the established product/module schema.
-`0006_pilot_safety` adds `invoice_send_attempts` and performs the narrow footer
-cleanup above. All compatibility IDs and existing business documents remain.
-Production rollback is a verified full database/document restore, never a
-destructive legacy-baseline downgrade.
+On 2026-08-20 the billing-policy candidate passed:
 
-## External gates
+- 67 backend tests and pip audit;
+- 9 frontend test files / 11 tests, TypeScript/Vite build and npm audit;
+- 3 Android JVM tests plus app/instrumentation APK assembly;
+- populated PostgreSQL `0006`-copy upgrade to `0007`;
+- API/PDF/billing/tax/quote/SMTP-lock/parallel-number acceptance;
+- Playwright and axe on both source and restored stacks;
+- history-aware secret scan, SBOM, encrypted Restic backup/check, and restore
+  into a separately named empty Compose target.
 
-- authorized deployment target access for inspector, revision, volume, proxy
-  and TLS evidence;
-- approved SMTP test account and operator-controlled recipient;
-- approved encrypted Restic/rclone target and protected credentials, followed
-  by an isolated real restore;
-- Android release-signing authority (not needed for the debug pilot smoke);
-- GitHub branch-protection/ruleset capability: current private-repository plan
-  returned HTTP 403, so the Draft PR/manual review gate is compensating control.
+The independent billing/legacy-data/tax/SMTP/backup review ended with no open
+P0 or P1. Final exact-head CI, API-35 and post-merge `master` checks are GitHub
+evidence and must be read from PR #3 / Actions, not inferred from local results.
+
+## Deployment boundary
+
+Repository documentation contains only `<NUC-IP>` placeholders and no exact
+authorized Docker host or access method. No target address may be guessed.
+`docs/INTERNAL_DEPLOYMENT_PLAN.md` is the complete stopped deployment plan.
+No real data, SMTP provider, offsite repository, deployment host, or release
+signing key was supplied or exercised.
 
 ## Primary references
 
+- `docs/BILLING_POLICY.md`
 - `docs/PILOT_SCOPE.md` and `docs/PILOT_RUNBOOK.md`
-- `docs/PILOT_BASELINE.md` and `docs/VERIFICATION_MATRIX.md`
+- `docs/VERIFICATION_MATRIX.md` and `docs/PILOT_BASELINE.md`
 - `docs/operations/INVOICE_OPERATOR_CHECKLIST.md`
 - `docs/operations/SMTP_ACCEPTANCE.md`
 - `docs/BACKUP_RESTORE.md`
-- `docs/GITHUB_REPOSITORY_SETTINGS.md`
+- `docs/INTERNAL_DEPLOYMENT_PLAN.md`
 - `.agent/TODO.md`

@@ -256,6 +256,16 @@ def test_timer_and_invoice_idempotency(
         "time_entry_ids": [entry_ids[0]],
         "tax_rate": "0",
     }
+    preview = client.post(
+        "/api/invoices/preview", headers=auth_headers, json=invoice_payload
+    )
+    assert preview.status_code == 200
+    invoice_payload.update(
+        {
+            "billing_confirmation_token": preview.json()["confirmation_token"],
+            "billing_confirmed": True,
+        }
+    )
     invoice = client.post(
         "/api/invoices", headers=invoice_headers, json=invoice_payload
     )
@@ -271,6 +281,10 @@ def test_timer_and_invoice_idempotency(
             "client_id": customer["id"],
             "time_entry_ids": [entry_ids[1]],
             "tax_rate": "0",
+            "billing_confirmation_token": invoice_payload[
+                "billing_confirmation_token"
+            ],
+            "billing_confirmed": True,
         },
     )
     assert mismatch.status_code == 409
@@ -287,7 +301,7 @@ def test_health_readiness_security_headers_structured_errors_and_rate_limit(
     readiness = client.get("/api/ready")
     assert readiness.status_code == 200
     assert readiness.json()["status"] == "ready"
-    assert readiness.json()["expected_schema_revision"] == "0006_pilot_safety"
+    assert readiness.json()["expected_schema_revision"] == "0007_billing_policy"
 
     invalid = client.post("/api/auth/login", json={})
     assert invalid.status_code == 422

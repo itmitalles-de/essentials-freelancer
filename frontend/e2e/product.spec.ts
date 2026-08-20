@@ -47,15 +47,22 @@ test("normal navigation follows module state and core data is visible", async ({
     label: "Synthetic Full Check Client",
   });
   await page.getByRole("button", { name: "Filter anwenden" }).click();
-  await expect(
-    page.getByRole("cell", { name: "Synthetic Full Check Client", exact: true })
-  ).toBeVisible();
+  const dashboardClientCells = page.getByRole("cell", {
+    name: "Synthetic Full Check Client",
+    exact: true,
+  });
+  await expect(dashboardClientCells).toHaveCount(2);
+  await expect(dashboardClientCells.first()).toBeVisible();
+  await expect(dashboardClientCells.nth(1)).toBeVisible();
   await expectNoSeriousAccessibilityViolations(page);
 
   await page.getByRole("link", { name: "Admin-Center" }).click();
   await expect(page.getByRole("heading", { name: "Admin-Center" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Kundenspezifisch" })).toBeVisible();
   await expect(page.getByText("sales.quote_assistant", { exact: true })).toBeVisible();
+  const smtpModule = page.locator("article").filter({ hasText: "communication.smtp" });
+  await expect(smtpModule.getByText("Deaktiviert", { exact: true })).toBeVisible();
+  await expect(smtpModule.getByRole("button", { name: "Pilotgesperrt" })).toBeDisabled();
   await expectNoSeriousAccessibilityViolations(page);
 
   await page.getByRole("link", { name: "Angebotsassistent" }).click();
@@ -67,9 +74,21 @@ test("normal navigation follows module state and core data is visible", async ({
 test("core data remains visible through the browser", async ({ page }) => {
   await login(page);
   await page.getByRole("link", { name: "Kunden" }).click();
-  await expect(page.getByRole("cell", { name: "Synthetic Full Check Client", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Kunden" })).toBeVisible();
+  const clientCells = page.getByRole("cell", {
+    name: "Synthetic Full Check Client",
+    exact: true,
+  });
+  await expect(clientCells).toHaveCount(1);
+  await expect(clientCells).toBeVisible();
   await page.getByRole("link", { name: "Rechnungen" }).click();
   await expect(page.locator("tbody tr")).toHaveCount(2);
+  await page.locator("tbody tr").first().getByRole("link").click();
+  await expect(page.getByText("31 min", { exact: true })).toBeVisible();
+  await expect(page.getByText("45 min", { exact: true })).toBeVisible();
+  await expect(page.getByText("small_business_section_19", { exact: false })).toBeVisible();
+  await expectNoSeriousAccessibilityViolations(page);
+  await page.getByRole("link", { name: "Rechnungen" }).click();
   await page.getByRole("link", { name: "Ausgaben" }).click();
   await expect(page.getByText("Synthetic PNG receipt")).toBeVisible();
   await expect(page.getByText("Synthetic JPEG receipt")).toBeVisible();

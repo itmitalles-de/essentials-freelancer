@@ -61,6 +61,14 @@ def create_invoice(
     }
     if due_in_days is not None:
         payload["due_in_days"] = due_in_days
+    preview = client.post("/api/invoices/preview", headers=headers, json=payload)
+    assert preview.status_code == 200, preview.text
+    payload.update(
+        {
+            "billing_confirmation_token": preview.json()["confirmation_token"],
+            "billing_confirmed": True,
+        }
+    )
     response = client.post("/api/invoices", headers=headers, json=payload)
     assert response.status_code == 200, response.text
     return response
@@ -178,47 +186,37 @@ def test_invoice_pdf_status_and_delete_flow(
         client, auth_headers, invoice, "missing-smtp"
     )
     assert missing_smtp.status_code == 409
-    assert missing_smtp.json()["detail"]["code"] == "module_unavailable"
+    assert missing_smtp.json()["detail"]["code"] == "pilot_module_locked"
     db_session.expire_all()
     assert db_session.get(Invoice, invoice["id"]).status.value == "draft"
 
-    sent_messages: list[str] = []
-
-    def send_email(*args, **kwargs):
-        sent_messages.append("sent")
-        return f"<synthetic-{len(sent_messages)}@example.invalid>"
-
-    monkeypatch.setattr("app.routers.invoices.send_invoice_email", send_email)
-    monkeypatch.setattr(settings, "smtp_host", "smtp.test.invalid")
-    monkeypatch.setattr(settings, "smtp_from", "sender@example.invalid")
     enabled = client.post(
         "/api/admin/modules/communication.smtp/enable", headers=auth_headers
     )
-    assert enabled.status_code == 200
-    assert enabled.json()["state"] == "enabled"
-    sent = send_confirmation(client, auth_headers, invoice, "first-send")
+    assert enabled.status_code == 409
+    assert enabled.json()["detail"]["code"] == "pilot_module_locked"
+
+    unconfirmed_manual = client.put(
+        f"/api/invoices/{invoice['id']}/status",
+        headers=auth_headers,
+        json={"status": "sent"},
+    )
+    assert unconfirmed_manual.status_code == 400
+    sent = client.put(
+        f"/api/invoices/{invoice['id']}/status",
+        headers=auth_headers,
+        json={
+            "status": "sent",
+            "pdf_reviewed": True,
+            "manual_delivery_confirmed": True,
+        },
+    )
     assert sent.status_code == 200
     assert sent.json()["status"] == "sent"
-    first_sent_at = sent.json()["sent_at"]
-    repeated_send = send_confirmation(client, auth_headers, invoice, "first-send")
-    assert repeated_send.status_code == 200
-    assert repeated_send.json()["status"] == "sent"
-    assert len(sent_messages) == 1
-
-    resent = send_confirmation(
-        client, auth_headers, sent.json(), "explicit-resend", resend=True
-    )
-    assert resent.status_code == 200
-    assert resent.json()["sent_at"] == first_sent_at
-    assert len(sent_messages) == 2
-
-    attempts = client.get(
+    assert sent.json()["sent_at"] is not None
+    assert client.get(
         f"/api/invoices/{invoice['id']}/send-attempts", headers=auth_headers
-    )
-    assert attempts.status_code == 200
-    assert [item["outcome"] for item in attempts.json()] == ["sent", "sent"]
-    assert [item["is_resend"] for item in attempts.json()] == [False, True]
-    assert all(item["message_id_redacted"].startswith("sha256:") for item in attempts.json())
+    ).json() == []
 
     paid = client.put(
         f"/api/invoices/{invoice['id']}/status",
@@ -251,10 +249,11 @@ def test_smtp_failure_keeps_invoice_as_draft(
         client.post(
             "/api/admin/modules/communication.smtp/enable", headers=auth_headers
         ).status_code
-        == 200
+        == 409
     )
     failed = send_confirmation(client, auth_headers, invoice, "failed-send")
-    assert failed.status_code == 502
+    assert failed.status_code == 409
+    assert failed.json()["detail"]["code"] == "pilot_module_locked"
     db_session.expire_all()
     stored = db_session.get(Invoice, invoice["id"])
     assert stored.status.value == "draft"
@@ -292,12 +291,13 @@ def test_specific_smtp_failures_never_mark_invoice_sent(
     monkeypatch.setattr(settings, "smtp_from", "sender@example.invalid")
     assert client.post(
         "/api/admin/modules/communication.smtp/enable", headers=auth_headers
-    ).status_code == 200
+    ).status_code == 409
 
     failed = send_confirmation(
         client, auth_headers, invoice, f"failed-{type(smtp_error).__name__}"
     )
-    assert failed.status_code == 502
+    assert failed.status_code == 409
+    assert failed.json()["detail"]["code"] == "pilot_module_locked"
     db_session.expire_all()
     stored = db_session.get(Invoice, invoice["id"])
     assert stored.status.value == "draft"
@@ -321,12 +321,12 @@ def test_send_requires_review_and_matching_confirmation(
     monkeypatch.setattr(settings, "smtp_from", "sender@example.invalid")
     assert client.post(
         "/api/admin/modules/communication.smtp/enable", headers=auth_headers
-    ).status_code == 200
+    ).status_code == 409
 
     not_reviewed = send_confirmation(
         client, auth_headers, invoice, "not-reviewed", pdf_reviewed=False
     )
-    assert not_reviewed.status_code == 400
+    assert not_reviewed.status_code == 409
     wrong_recipient = send_confirmation(
         client,
         auth_headers,
@@ -335,6 +335,7 @@ def test_send_requires_review_and_matching_confirmation(
         recipient="other@example.invalid",
     )
     assert wrong_recipient.status_code == 409
+    assert wrong_recipient.json()["detail"]["code"] == "pilot_module_locked"
     assert calls == []
 
 
@@ -350,44 +351,40 @@ def test_partial_smtp_auth_configuration_never_sends(
     monkeypatch.setattr(settings, "smtp_password", "")
     assert client.post(
         "/api/admin/modules/communication.smtp/enable", headers=auth_headers
-    ).status_code == 200
+    ).status_code == 409
 
     failed = send_confirmation(client, auth_headers, invoice, "partial-smtp-auth")
-    assert failed.status_code == 400
-    assert "gemeinsam konfiguriert" in failed.json()["detail"]
+    assert failed.status_code == 409
+    assert failed.json()["detail"]["code"] == "pilot_module_locked"
     db_session.expire_all()
     stored = db_session.get(Invoice, invoice["id"])
     assert stored.status.value == "draft"
     assert stored.sent_at is None
 
 
-def test_failed_resend_preserves_original_sent_state(
-    client: TestClient, auth_headers: dict[str, str], db_session, monkeypatch
+def test_smtp_lock_preserves_manually_sent_state(
+    client: TestClient, auth_headers: dict[str, str], db_session
 ):
     client_id = create_client(client, auth_headers)
     entry_id = create_time_entry(client, auth_headers, client_id)
     invoice = create_invoice(client, auth_headers, client_id, entry_id).json()
-    monkeypatch.setattr(settings, "smtp_host", "smtp.test.invalid")
-    monkeypatch.setattr(settings, "smtp_from", "sender@example.invalid")
-    assert client.post(
-        "/api/admin/modules/communication.smtp/enable", headers=auth_headers
-    ).status_code == 200
-    monkeypatch.setattr(
-        "app.routers.invoices.send_invoice_email",
-        lambda *args, **kwargs: "<first@example.invalid>",
+    sent = client.put(
+        f"/api/invoices/{invoice['id']}/status",
+        headers=auth_headers,
+        json={
+            "status": "sent",
+            "pdf_reviewed": True,
+            "manual_delivery_confirmed": True,
+        },
     )
-    sent = send_confirmation(client, auth_headers, invoice, "successful-first")
     assert sent.status_code == 200
     original_sent_at = sent.json()["sent_at"]
 
-    def fail_resend(*args, **kwargs):
-        raise smtplib.SMTPServerDisconnected("synthetic resend disconnect")
-
-    monkeypatch.setattr("app.routers.invoices.send_invoice_email", fail_resend)
     failed = send_confirmation(
         client, auth_headers, sent.json(), "failed-resend", resend=True
     )
-    assert failed.status_code == 502
+    assert failed.status_code == 409
+    assert failed.json()["detail"]["code"] == "pilot_module_locked"
     db_session.expire_all()
     stored = db_session.get(Invoice, invoice["id"])
     assert stored.status.value == "sent"
@@ -395,21 +392,19 @@ def test_failed_resend_preserves_original_sent_state(
     attempts = client.get(
         f"/api/invoices/{invoice['id']}/send-attempts", headers=auth_headers
     ).json()
-    assert [(item["is_resend"], item["outcome"]) for item in attempts] == [
-        (False, "sent"),
-        (True, "failed"),
-    ]
+    assert attempts == []
 
 
 @pytest.mark.parametrize(
     ("minutes", "expected_quantity", "expected_total"),
     [
-        (1, "0.02", "2.47"),
-        (5, "0.08", "9.88"),
-        (59, "0.98", "120.98"),
+        (1, "0.2500", "30.86"),
+        (16, "0.5000", "61.73"),
+        (31, "0.7500", "92.59"),
+        (59, "1.0000", "123.45"),
     ],
 )
-def test_invoice_uses_displayed_rounded_quantity_for_amount(
+def test_invoice_uses_confirmed_billable_minutes_for_amount(
     client: TestClient,
     auth_headers: dict[str, str],
     minutes: int,
@@ -423,6 +418,9 @@ def test_invoice_uses_displayed_rounded_quantity_for_amount(
     assert line["quantity"] == expected_quantity
     assert line["net_amount"] == expected_total
     assert line["amount"] == expected_total
+    assert line["snapshot_actual_minutes"] == minutes
+    assert line["snapshot_billable_minutes"] in {15, 30, 45, 60}
+    assert line["snapshot_increment_minutes"] == 15
     assert invoice["subtotal"] == expected_total
     assert invoice["total"] == expected_total
 
@@ -431,24 +429,20 @@ def test_invoice_uses_displayed_rounded_quantity_for_amount(
 def test_cancelled_invoices_are_terminal(
     client: TestClient,
     auth_headers: dict[str, str],
-    monkeypatch,
     initial_status: str,
 ):
     client_id = create_client(client, auth_headers)
     entry_id = create_time_entry(client, auth_headers, client_id)
     invoice = create_invoice(client, auth_headers, client_id, entry_id).json()
     if initial_status == "sent":
-        monkeypatch.setattr(settings, "smtp_host", "smtp.test.invalid")
-        monkeypatch.setattr(settings, "smtp_from", "sender@example.invalid")
-        assert client.post(
-            "/api/admin/modules/communication.smtp/enable", headers=auth_headers
-        ).status_code == 200
-        monkeypatch.setattr(
-            "app.routers.invoices.send_invoice_email",
-            lambda *args, **kwargs: "<cancel-test@example.invalid>",
-        )
-        invoice = send_confirmation(
-            client, auth_headers, invoice, "send-before-cancel"
+        invoice = client.put(
+            f"/api/invoices/{invoice['id']}/status",
+            headers=auth_headers,
+            json={
+                "status": "sent",
+                "pdf_reviewed": True,
+                "manual_delivery_confirmed": True,
+            },
         ).json()
 
     cancelled = client.put(
@@ -478,6 +472,16 @@ def test_deleting_draft_unbills_time_and_missing_pdf_is_404(
         f"/api/invoices/{invoice['id']}/pdf", headers=auth_headers
     )
     assert missing.status_code == 404
+    cannot_confirm_delivery = client.put(
+        f"/api/invoices/{invoice['id']}/status",
+        headers=auth_headers,
+        json={
+            "status": "sent",
+            "pdf_reviewed": True,
+            "manual_delivery_confirmed": True,
+        },
+    )
+    assert cannot_confirm_delivery.status_code == 400
 
     deleted = client.delete(
         f"/api/invoices/{invoice['id']}", headers=auth_headers
@@ -515,11 +519,20 @@ def test_pdf_failure_rolls_back_invoice_and_time_entry(
     def fail_pdf(*args, **kwargs):
         raise OSError("synthetic PDF storage failure")
 
+    payload = {"client_id": client_id, "time_entry_ids": [entry_id], "tax_rate": "0"}
+    preview = client.post("/api/invoices/preview", headers=auth_headers, json=payload)
+    assert preview.status_code == 200
+    payload.update(
+        {
+            "billing_confirmation_token": preview.json()["confirmation_token"],
+            "billing_confirmed": True,
+        }
+    )
     monkeypatch.setattr("app.routers.invoices.generate_invoice_pdf", fail_pdf)
     response = client.post(
         "/api/invoices",
         headers=auth_headers,
-        json={"client_id": client_id, "time_entry_ids": [entry_id], "tax_rate": "0"},
+        json=payload,
     )
 
     assert response.status_code == 500

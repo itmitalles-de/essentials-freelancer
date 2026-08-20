@@ -127,6 +127,18 @@ def fixture_request(base_url: str, method: str, path: str, body: object | None =
     return json.load(urllib.request.urlopen(request, timeout=10))
 
 
+def confirmed_invoice_payload(api: Api, payload: dict) -> tuple[dict, dict]:
+    preview = api.request("POST", "/api/invoices/preview", payload)
+    return (
+        {
+            **payload,
+            "billing_confirmation_token": preview["confirmation_token"],
+            "billing_confirmed": True,
+        },
+        preview,
+    )
+
+
 def tiny_images() -> tuple[bytes, bytes]:
     # Generated synthetic 2x2 RGB fixtures, never real receipt content.
     png = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGMU0bBhYGBgYmBgYGBgAAAFogB8q5SvRgAAAABJRU5ErkJggg=="
@@ -148,7 +160,7 @@ def verify_pdf(content: bytes, path: str, expected_terms: list[str]) -> None:
 
 def verify_core(api: Api, revision: str, *, backup_state: str) -> None:
     ready = api.request("GET", "/api/ready")
-    expect(ready["schema_revision"] == "0006_pilot_safety", "schema mismatch")
+    expect(ready["schema_revision"] == "0007_billing_policy", "schema mismatch")
     meta = api.request("GET", "/api/meta")
     expect(meta["product"] == "Essentials+ Freelancer", "product metadata mismatch")
     expect(meta["repository_revision"] == revision, "repository revision mismatch")
@@ -156,26 +168,58 @@ def verify_core(api: Api, revision: str, *, backup_state: str) -> None:
     expect(meta["readiness"] == "ready", "metadata readiness mismatch")
     clients = api.request("GET", "/api/clients?q=Synthetic%20Full%20Check")
     expect(len(clients) == 1, "restored client not unique/present")
+    expect(
+        clients[0]["billing_rate_type"] == "private"
+        and clients[0]["hourly_rate"] == "50.00"
+        and clients[0]["default_service_mode"] == "remote"
+        and clients[0]["billing_profile_confirmed"],
+        "client billing profile differs after restore",
+    )
     projects = api.request("GET", f"/api/projects?client_id={clients[0]['id']}")
-    expect(len(projects) == 1 and projects[0]["hourly_rate"] == "123.45", "project/rate missing")
+    expect(
+        len(projects) == 1
+        and projects[0]["hourly_rate"] == "75.00"
+        and projects[0]["billing_rate_type_override"] == "business"
+        and projects[0]["default_service_mode"] == "onsite"
+        and projects[0]["is_individual_project"]
+        and projects[0]["billing_profile_confirmed"],
+        "project billing override differs after restore",
+    )
+    settings = api.request("GET", "/api/settings")
+    expect(
+        settings["private_hourly_rate"] == "50.00"
+        and settings["business_hourly_rate"] == "75.00"
+        and settings["travel_hourly_rate"] == "30.00"
+        and settings["travel_minimum_minutes"] == 30
+        and settings["travel_increment_minutes"] is None
+        and settings["default_tax_rate"] == "0.00"
+        and settings["small_business_notice_enabled"],
+        "operator billing/tax profile differs after restore",
+    )
     invoices = api.request("GET", f"/api/invoices?client_id={clients[0]['id']}")
     expect(len(invoices) == 2, "invoice core count differs after restore")
     for invoice in invoices:
         document, _ = api.request("GET", f"/api/invoices/{invoice['id']}/pdf", raw=True)
         expect(document.startswith(b"%PDF-"), "restored invoice PDF is unavailable")
     paid_invoice = next(item for item in invoices if item["status"] == "paid")
+    snapshot_lines = sorted(paid_invoice["line_items"], key=lambda item: item["id"])
+    expect(
+        [item["snapshot_line_kind"] for item in snapshot_lines]
+        == ["work", "work", "travel"],
+        "billing snapshot line kinds differ",
+    )
+    expect(
+        [item["snapshot_actual_minutes"] for item in snapshot_lines] == [31, 20, 10]
+        and [item["snapshot_billable_minutes"] for item in snapshot_lines]
+        == [45, 60, 30]
+        and [item["snapshot_hourly_rate"] for item in snapshot_lines]
+        == ["50.00", "75.00", "30.00"],
+        "actual/billable duration or applied rates differ",
+    )
     send_attempts = api.request(
         "GET", f"/api/invoices/{paid_invoice['id']}/send-attempts"
     )
-    expect(
-        [(item["is_resend"], item["outcome"]) for item in send_attempts]
-        == [(False, "sent"), (True, "sent")],
-        "invoice send history differs",
-    )
-    expect(
-        all(item["message_id_redacted"].startswith("sha256:") for item in send_attempts),
-        "redacted SMTP evidence is missing",
-    )
+    expect(send_attempts == [], "SMTP send history must stay empty in the pilot")
     quotes = api.request("GET", f"/api/quotes?client_id={clients[0]['id']}")
     expect(
         len(quotes) == 2
@@ -211,8 +255,9 @@ def verify_core(api: Api, revision: str, *, backup_state: str) -> None:
     }
     expect(module_states["sales.quote_assistant"] == "enabled", "assistant state differs")
     expect(module_states["backup.offsite"] == backup_state, "offsite state differs")
+    expect(module_states["communication.smtp"] == "disabled", "SMTP pilot lock differs")
     report = api.request("GET", f"/api/reports/summary?client_id={clients[0]['id']}")
-    expect(report["time"]["captured_hours"] == "2.50", "captured time differs")
+    expect(report["time"]["captured_hours"] == "1.35", "captured time differs")
     expect(report["invoices"]["statuses"]["paid"] == 1, "paid invoice differs")
 
 
@@ -233,8 +278,21 @@ def run_source(api: Api, smtp_api_url: str, revision: str) -> None:
         "invoice_footer_note": "SYNTHETIC FOOTER — NICHT BUCHEN",
         "invoice_number_prefix": "RE",
         "quote_number_prefix": "AN",
-        "default_hourly_rate": "0",
+        "default_hourly_rate": "50.00",
         "default_payment_terms_days": 14,
+        "private_hourly_rate": "50.00",
+        "business_hourly_rate": "75.00",
+        "travel_hourly_rate": "30.00",
+        "first_order_minimum_minutes": 60,
+        "onsite_minimum_minutes": 60,
+        "remote_increment_minutes": 15,
+        "travel_minimum_minutes": 30,
+        "travel_increment_minutes": None,
+        "default_tax_rate": "0.00",
+        "small_business_notice_enabled": True,
+        "small_business_notice_text": (
+            "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet."
+        ),
     }
     configured = api.request("PUT", "/api/settings", company_settings)
     expect(
@@ -261,7 +319,10 @@ def run_source(api: Api, smtp_api_url: str, revision: str) -> None:
             "address_line1": "Kunden-Testweg 2",
             "zip_city": "00000 Teststadt",
             "email": "billing@example.invalid",
-            "hourly_rate": "88.00",
+            "hourly_rate": "50.00",
+            "billing_rate_type": "private",
+            "default_service_mode": "remote",
+            "billing_profile_confirmed": True,
         },
     )
     project = api.request(
@@ -270,7 +331,11 @@ def run_source(api: Api, smtp_api_url: str, revision: str) -> None:
         {
             "client_id": client["id"],
             "name": "Synthetic Full Check Project",
-            "hourly_rate": "123.45",
+            "hourly_rate": "75.00",
+            "billing_rate_type_override": "business",
+            "default_service_mode": "onsite",
+            "is_individual_project": True,
+            "billing_profile_confirmed": True,
         },
     )
 
@@ -299,10 +364,25 @@ def run_source(api: Api, smtp_api_url: str, revision: str) -> None:
         "/api/time-entries",
         {
             "client_id": client["id"],
+            "date": today,
+            "description": "Synthetic private remote work",
+            "duration_minutes": 31,
+            "service_mode": "remote",
+            "is_first_order": False,
+        },
+    )
+    onsite = api.request(
+        "POST",
+        "/api/time-entries",
+        {
+            "client_id": client["id"],
             "project_id": project["id"],
             "date": today,
-            "description": "Synthetic manual work",
-            "duration_minutes": 120,
+            "description": "Synthetic onsite work",
+            "duration_minutes": 20,
+            "service_mode": "onsite",
+            "is_first_order": False,
+            "travel_actual_minutes": 10,
         },
     )
 
@@ -323,15 +403,23 @@ def run_source(api: Api, smtp_api_url: str, revision: str) -> None:
         for index in (1, 2)
     ]
 
+    parallel_payloads = [
+        confirmed_invoice_payload(
+            api,
+            {
+                "client_id": client["id"],
+                "time_entry_ids": [entry["id"]],
+                "tax_rate": "0",
+            },
+        )[0]
+        for entry in parallel_entries
+    ]
+
     def create_parallel_invoice(index: int):
         return api.request(
             "POST",
             "/api/invoices",
-            {
-                "client_id": client["id"],
-                "time_entry_ids": [parallel_entries[index]["id"]],
-                "tax_rate": "0",
-            },
+            parallel_payloads[index],
             headers={"Idempotency-Key": f"parallel-invoice-{index}"},
         )
 
@@ -359,7 +447,7 @@ def run_source(api: Api, smtp_api_url: str, revision: str) -> None:
                 "description": "Synthetic assistant service",
                 "unit": "hours",
                 "net_unit_price": "99.95",
-                "tax_rate": "19",
+                "tax_rate": "0",
                 "valid_from": "2026-01-01",
             },
         },
@@ -406,8 +494,8 @@ def run_source(api: Api, smtp_api_url: str, revision: str) -> None:
             "project_id": project["id"],
             "notes": "Synthetic full check quote",
             "line_items": [
-                {"description": "Synthetic service", "quantity": "2", "unit": "hours", "unit_price": "100", "tax_rate": "19"},
-                {"description": "Synthetic material", "quantity": "3", "unit": "items", "unit_price": "25", "tax_rate": "7"},
+                {"description": "Synthetic service", "quantity": "2", "unit": "hours", "unit_price": "100", "tax_rate": "0"},
+                {"description": "Synthetic material", "quantity": "3", "unit": "items", "unit_price": "25", "tax_rate": "0"},
             ],
         },
     )
@@ -415,21 +503,68 @@ def run_source(api: Api, smtp_api_url: str, revision: str) -> None:
     verify_pdf(quote_pdf, os.path.join(api.work_dir, "quote.pdf"), [quote["quote_number"], "Synthetic service", "Synthetic material"])
     api.request("PUT", f"/api/quotes/{quote['id']}/status", {"status": "sent"})
     api.request("PUT", f"/api/quotes/{quote['id']}/status", {"status": "accepted"})
-    converted = api.request("POST", f"/api/quotes/{quote['id']}/convert")
-    repeated_conversion = api.request("POST", f"/api/quotes/{quote['id']}/convert")
+    quote_invoice_preview = api.request(
+        "POST",
+        f"/api/quotes/{quote['id']}/invoice-preview",
+        {"service_date": today},
+    )
+    expect(
+        quote_invoice_preview["fixed_total"] == "275.00"
+        and quote_invoice_preview["work_total"] == "0.00"
+        and quote_invoice_preview["travel_total"] == "0.00"
+        and all(
+            line["actual_minutes"] is None
+            and line["billable_minutes"] is None
+            and line["service_date"] == today
+            for line in quote_invoice_preview["lines"]
+        ),
+        "fixed-quote invoice preview invented time or totals",
+    )
+    quote_conversion_payload = {
+        "service_date": today,
+        "billing_confirmation_token": quote_invoice_preview["confirmation_token"],
+        "billing_confirmed": True,
+    }
+    converted = api.request(
+        "POST", f"/api/quotes/{quote['id']}/convert", quote_conversion_payload
+    )
+    repeated_conversion = api.request(
+        "POST", f"/api/quotes/{quote['id']}/convert", quote_conversion_payload
+    )
     expect(converted["converted_invoice_id"] == repeated_conversion["converted_invoice_id"], "quote converted twice")
 
     invoice_headers = {"Idempotency-Key": "full-check-time-invoice"}
+    invoice_payload, billing_preview = confirmed_invoice_payload(
+        api,
+        {
+            "client_id": client["id"],
+            "time_entry_ids": [manual["id"], onsite["id"]],
+            "tax_rate": "0",
+        },
+    )
+    expect(
+        [(line["actual_minutes"], line["billable_minutes"], line["hourly_rate"])
+         for line in billing_preview["lines"]]
+        == [(31, 45, "50.00"), (20, 60, "75.00"), (10, 30, "30.00")],
+        "billing preview did not expose the confirmed work/travel decisions",
+    )
+    expect(
+        billing_preview["work_total"] == "112.50"
+        and billing_preview["travel_total"] == "15.00"
+        and billing_preview["total"] == "127.50"
+        and billing_preview["tax_status"] == "small_business_section_19",
+        "billing preview totals or tax status differ",
+    )
     invoice = api.request(
         "POST",
         "/api/invoices",
-        {"client_id": client["id"], "time_entry_ids": [manual["id"]], "tax_rate": "0"},
+        invoice_payload,
         headers=invoice_headers,
     )
     repeated_invoice = api.request(
         "POST",
         "/api/invoices",
-        {"client_id": client["id"], "time_entry_ids": [manual["id"]], "tax_rate": "0"},
+        invoice_payload,
         headers=invoice_headers,
     )
     expect(invoice["id"] == repeated_invoice["id"], "invoice command not idempotent")
@@ -440,16 +575,24 @@ def run_source(api: Api, smtp_api_url: str, revision: str) -> None:
         [
             invoice["invoice_number"],
             "Synthetic",
-            "manual",
+            "private",
             "work",
-            "246,90",
+            "Tatsächlich: 31 Min.",
+            "Abrechenbar: 45 Min.",
+            "Tatsächlich: 10 Min.",
+            "Abrechenbar: 30 Min.",
+            "0.7500",
+            "Std.",
+            "Stundensatz: 50,00 €/Std.",
+            "127,50",
             "Steuer 0,00 %",
+            "§ 19 UStG",
             "TESTBETRIEB",
             "Synthetic Operator",
             "Kunden-Testweg 2",
             "SYNTHETIC FOOTER",
             "IBAN",
-            "Leistung am",
+            f"Leistungsdatum: {date.today().strftime('%d.%m.%Y')}",
         ],
     )
     changed_settings = dict(company_settings)
@@ -459,6 +602,19 @@ def run_source(api: Api, smtp_api_url: str, revision: str) -> None:
     expect(stable_pdf == invoice_pdf, "existing invoice PDF changed after footer update")
 
     fixture_request(smtp_api_url, "POST", "/api/reset", {})
+    smtp_module = next(
+        item
+        for item in api.request("GET", "/api/admin/modules")
+        if item["manifest"]["id"] == "communication.smtp"
+    )
+    expect(smtp_module["state"] == "disabled", "SMTP did not start disabled")
+    locked = api.request(
+        "POST", "/api/admin/modules/communication.smtp/enable", expected=409
+    )
+    expect(
+        locked["detail"]["code"] == "pilot_module_locked",
+        "SMTP pilot lock can be bypassed",
+    )
     first_send_body = {
         "recipient": "billing@example.invalid",
         "invoice_number": invoice["invoice_number"],
@@ -466,98 +622,52 @@ def run_source(api: Api, smtp_api_url: str, revision: str) -> None:
         "pdf_reviewed": True,
         "resend": False,
     }
+    locked_send = api.request(
+        "POST",
+        f"/api/invoices/{invoice['id']}/send",
+        first_send_body,
+        expected=409,
+        headers={"Idempotency-Key": "full-check-first-send"},
+    )
+    expect(
+        locked_send["detail"]["code"] == "pilot_module_locked",
+        "disabled SMTP path did not report its locked state",
+    )
+    messages = fixture_request(smtp_api_url, "GET", "/api/messages")
+    expect(messages == [], "locked SMTP path emitted an external message")
+    expect(
+        api.request("GET", f"/api/invoices/{invoice['id']}/send-attempts") == [],
+        "locked SMTP path persisted a send attempt",
+    )
     sent = api.request(
-        "POST",
-        f"/api/invoices/{invoice['id']}/send",
-        first_send_body,
-        headers={"Idempotency-Key": "full-check-first-send"},
+        "PUT",
+        f"/api/invoices/{invoice['id']}/status",
+        {
+            "status": "sent",
+            "pdf_reviewed": True,
+            "manual_delivery_confirmed": True,
+        },
     )
-    expect(sent["status"] == "sent", "SMTP success did not mark sent")
-    first_sent_at = sent["sent_at"]
-    api.request(
-        "POST",
-        f"/api/invoices/{invoice['id']}/send",
-        first_send_body,
-        headers={"Idempotency-Key": "full-check-first-send"},
-    )
-    messages = fixture_request(smtp_api_url, "GET", "/api/messages")
-    expect(len(messages) == 1, "idempotent replay sent a duplicate SMTP message")
-    resend_body = {**first_send_body, "resend": True}
-    resent = api.request(
-        "POST",
-        f"/api/invoices/{invoice['id']}/send",
-        resend_body,
-        headers={"Idempotency-Key": "full-check-explicit-resend"},
-    )
-    expect(resent["sent_at"] == first_sent_at, "resend overwrote original sent_at")
-    messages = fixture_request(smtp_api_url, "GET", "/api/messages")
-    expect(len(messages) == 2, "explicit SMTP resend was not captured exactly once")
-    for message in messages:
-        expect(message["to"] == ["billing@example.invalid"], "SMTP recipient differs")
-        expect(message["subject"] == f"Rechnung {invoice['invoice_number']}", "SMTP subject differs")
-        expect(len(message["attachments"]) == 1, "SMTP attachment missing")
-        attachment = message["attachments"][0]
-        expect(attachment["content_type"] == "application/pdf", "attachment MIME differs")
-        expect(base64.b64decode(attachment["content_base64"]).startswith(b"%PDF-"), "attachment is not PDF")
-
-    failure_invoices: list[tuple[int, int]] = []
-    for index, mode in enumerate(("reject", "timeout", "disconnect"), start=1):
-        entry = api.request(
-            "POST",
-            "/api/time-entries",
-            {
-                "client_id": client["id"],
-                "project_id": project["id"],
-                "date": today,
-                "description": f"Synthetic SMTP {mode}",
-                "duration_minutes": 5,
-            },
-        )
-        failed_invoice = api.request(
-            "POST",
-            "/api/invoices",
-            {"client_id": client["id"], "time_entry_ids": [entry["id"]], "tax_rate": "0"},
-        )
-        if mode == "reject":
-            expect(
-                failed_invoice["line_items"][0]["quantity"] == "0.08"
-                and failed_invoice["total"] == "9.88",
-                "five-minute invoice does not use its displayed rounded quantity",
-            )
-        fixture_request(smtp_api_url, "POST", "/api/mode", {"mode": mode})
-        api.request(
-            "POST",
-            f"/api/invoices/{failed_invoice['id']}/send",
-            {
-                "recipient": "billing@example.invalid",
-                "invoice_number": failed_invoice["invoice_number"],
-                "total": failed_invoice["total"],
-                "pdf_reviewed": True,
-                "resend": False,
-            },
-            expected=502,
-            headers={"Idempotency-Key": f"full-check-failed-{mode}"},
-        )
-        stored = api.request("GET", f"/api/invoices/{failed_invoice['id']}")
-        expect(stored["status"] == "draft" and stored["sent_at"] is None, f"{mode} falsely marked sent")
-        failure_invoices.append((failed_invoice["id"], entry["id"]))
-    fixture_request(smtp_api_url, "POST", "/api/mode", {"mode": "success"})
-
+    expect(sent["status"] == "sent" and sent["sent_at"] is not None, "manual delivery confirmation failed")
     paid = api.request("PUT", f"/api/invoices/{invoice['id']}/status", {"status": "paid"})
     expect(paid["paid_at"] is not None, "paid timestamp missing")
     api.request("PUT", f"/api/invoices/{invoice['id']}/status", {"status": "cancelled"}, expected=400)
-    api.request(
+    paid_locked_send = api.request(
         "POST",
         f"/api/invoices/{invoice['id']}/send",
-        resend_body,
-        expected=400,
+        {**first_send_body, "resend": True},
+        expected=409,
         headers={"Idempotency-Key": "full-check-send-after-paid"},
     )
-
-    # Remove failure-only drafts so the exported/restored core count stays deterministic.
-    for invoice_id, entry_id in failure_invoices:
-        api.request("DELETE", f"/api/invoices/{invoice_id}", expected=204)
-        api.request("DELETE", f"/api/time-entries/{entry_id}", expected=204)
+    expect(
+        paid_locked_send["detail"]["code"] == "pilot_module_locked",
+        "SMTP pilot lock changed after manual invoice status updates",
+    )
+    expect(
+        api.request("GET", f"/api/invoices/{invoice['id']}/send-attempts") == []
+        and fixture_request(smtp_api_url, "GET", "/api/messages") == [],
+        "paid-invoice SMTP probe created local or external send evidence",
+    )
 
     png, jpeg = tiny_images()
     fixtures = [

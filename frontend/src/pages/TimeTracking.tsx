@@ -19,6 +19,9 @@ export function TimeTracking() {
   const [timerClientId, setTimerClientId] = useState<number | "">("");
   const [timerProjectId, setTimerProjectId] = useState<number | "">("");
   const [timerDescription, setTimerDescription] = useState("");
+  const [timerServiceMode, setTimerServiceMode] = useState<"" | "remote" | "onsite">("");
+  const [timerFirstOrder, setTimerFirstOrder] = useState(false);
+  const [timerTravelMinutes, setTimerTravelMinutes] = useState("0");
   const [filterClientId, setFilterClientId] = useState<number | "">("");
   const [error, setError] = useState<string | null>(null);
 
@@ -27,7 +30,10 @@ export function TimeTracking() {
     project_id: "",
     date: new Date().toISOString().slice(0, 10),
     description: "",
-    hours: "",
+    minutes: "",
+    service_mode: "" as "" | "remote" | "onsite",
+    is_first_order: false,
+    travel_actual_minutes: "0",
   });
 
   const loadClients = () => api.get<Client[]>("/clients").then(setClients);
@@ -67,6 +73,9 @@ export function TimeTracking() {
         client_id: timerClientId,
         project_id: timerProjectId || null,
         description: timerDescription,
+        service_mode: timerServiceMode || null,
+        is_first_order: timerFirstOrder,
+        travel_actual_minutes: Number(timerTravelMinutes) || 0,
       });
       setRunning(entry);
     } catch (e) {
@@ -81,6 +90,7 @@ export function TimeTracking() {
       await api.post(`/time-entries/${running.id}/stop`);
       setRunning(null);
       setTimerDescription("");
+      setTimerTravelMinutes("0");
       loadEntries();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : t("time.errStop"));
@@ -96,9 +106,12 @@ export function TimeTracking() {
         project_id: manual.project_id ? Number(manual.project_id) : null,
         date: manual.date,
         description: manual.description,
-        duration_minutes: Math.round(Number(manual.hours) * 60),
+        duration_minutes: Number(manual.minutes),
+        service_mode: manual.service_mode || null,
+        is_first_order: manual.is_first_order,
+        travel_actual_minutes: Number(manual.travel_actual_minutes) || 0,
       });
-      setManual({ ...manual, description: "", hours: "" });
+      setManual({ ...manual, description: "", minutes: "" });
       loadEntries();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("time.errSave"));
@@ -149,6 +162,21 @@ export function TimeTracking() {
                 <option key={project.id} value={project.id}>{project.name}</option>
               ))}
             </select>
+            <label>{t("time.serviceMode")}
+              <select value={timerServiceMode} onChange={(e) => setTimerServiceMode(e.target.value as "" | "remote" | "onsite")}>
+                <option value="">{t("billing.inherit")}</option>
+                <option value="remote">{t("billing.remote")}</option>
+                <option value="onsite">{t("billing.onsite")}</option>
+              </select>
+            </label>
+            <label><input type="checkbox" checked={timerFirstOrder} onChange={(e) => setTimerFirstOrder(e.target.checked)} /> {t("time.firstOrder")}</label>
+            <input
+              type="number"
+              min="0"
+              placeholder={t("time.travelMinutes")}
+              value={timerTravelMinutes}
+              onChange={(e) => setTimerTravelMinutes(e.target.value)}
+            />
             <input
               placeholder={t("time.description")}
               value={timerDescription}
@@ -176,14 +204,21 @@ export function TimeTracking() {
         </select>
         <input type="date" value={manual.date} onChange={(e) => setManual({ ...manual, date: e.target.value })} />
         <input placeholder={t("time.description")} value={manual.description} onChange={(e) => setManual({ ...manual, description: e.target.value })} />
+        <select value={manual.service_mode} onChange={(e) => setManual({ ...manual, service_mode: e.target.value as "" | "remote" | "onsite" })}>
+          <option value="">{t("billing.inherit")}</option>
+          <option value="remote">{t("billing.remote")}</option>
+          <option value="onsite">{t("billing.onsite")}</option>
+        </select>
+        <label><input type="checkbox" checked={manual.is_first_order} onChange={(e) => setManual({ ...manual, is_first_order: e.target.checked })} /> {t("time.firstOrder")}</label>
+        <input type="number" min="0" placeholder={t("time.travelMinutes")} value={manual.travel_actual_minutes} onChange={(e) => setManual({ ...manual, travel_actual_minutes: e.target.value })} />
         <input
-          placeholder={t("time.hours")}
+          placeholder={t("time.actualMinutes")}
           type="number"
-          step="0.25"
+          step="1"
           min="0"
           required
-          value={manual.hours}
-          onChange={(e) => setManual({ ...manual, hours: e.target.value })}
+          value={manual.minutes}
+          onChange={(e) => setManual({ ...manual, minutes: e.target.value })}
           style={{ width: 90 }}
         />
         <button type="submit">{t("time.add")}</button>
@@ -206,7 +241,10 @@ export function TimeTracking() {
             <th>{t("time.colProject")}</th>
             <th>{t("time.colDescription")}</th>
             <th>{t("time.colDuration")}</th>
+            <th>{t("time.colBillable")}</th>
             <th>{t("time.colRate")}</th>
+            <th>{t("time.colTravel")}</th>
+            <th>{t("time.colBilling")}</th>
             <th>{t("time.colStatus")}</th>
             <th></th>
           </tr>
@@ -218,8 +256,11 @@ export function TimeTracking() {
               <td>{clientName(e.client_id)}</td>
               <td>{projectName(e.project_id)}</td>
               <td>{e.description}</td>
-              <td>{formatDuration(e.duration_minutes)}</td>
-              <td>{e.hourly_rate} €/h</td>
+              <td>{e.actual_minutes ?? e.duration_minutes} min</td>
+              <td>{e.billable_minutes == null ? "—" : `${e.billable_minutes} min`}</td>
+              <td>{e.hourly_rate} €/h ({e.billing_rate_type ?? "—"})<br />{t("time.rateSource")}: {e.billing_rate_source ?? "—"}</td>
+              <td>{e.travel_actual_minutes} → {e.travel_billable_minutes ?? "—"} min</td>
+              <td>{e.service_mode ? t(`billing.${e.service_mode}`) : "—"}{e.is_first_order ? ` · ${t("time.firstOrder")}` : ""}<br />{e.applied_minimum_minutes ?? "—"} min / {e.applied_increment_minutes ?? "—"} min<br />{e.billing_reason ?? "—"} · {t("time.policy")}: {e.billing_policy_id ?? "—"}<br />{e.travel_billing_reason ?? "—"}</td>
               <td>{e.billed ? t("time.statusBilled") : t("time.statusOpen")}</td>
               <td>
                 {!e.billed && (

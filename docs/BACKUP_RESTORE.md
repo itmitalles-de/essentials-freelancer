@@ -73,4 +73,13 @@ The optional restore-evidence file consumed by `collect-deployment-state.py` has
 
 ## Rollback boundary
 
-Migrations `0002` through `0006` preserve compatibility IDs and existing business documents on upgrade. `0006_pilot_safety` adds invoice-send evidence and clears only the exact known footer sentence formerly injected automatically; custom footer text is retained. Downgrades can discard newer state and are not production rollback. Restore the complete database/document export at the revision in `MANIFEST.txt`; upgrade only after that revision is healthy. The legacy baseline refuses destructive downgrade.
+Migrations `0002` through `0007` preserve compatibility IDs and existing
+business documents on upgrade. `0006_pilot_safety` adds invoice-send evidence
+and clears only the exact known footer sentence formerly injected
+automatically; custom footer text is retained. `0007_billing_policy` adds
+nullable historical snapshot fields and unconfirmed legacy billing profiles;
+it does not recalculate old invoices/time, renumber documents, or rewrite PDF
+files. Its downgrade intentionally refuses to discard billing evidence.
+Downgrades are not production rollback. Restore the complete database/document
+export at the revision in `MANIFEST.txt`; upgrade only after that revision is
+healthy. The legacy baseline refuses destructive downgrade.

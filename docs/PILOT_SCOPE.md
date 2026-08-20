@@ -14,7 +14,8 @@ APIs, database tables, hidden routes, feature flags, or disabled UI.
 - the administrator's own clients and projects;
 - the administrator's own manual time entries and timer use;
 - the administrator's own quotes, including manually reviewed PDFs;
-- the administrator's own draft invoices and manually reviewed PDFs;
+- the administrator's own draft invoices, explicit billing confirmations,
+  manually reviewed PDFs, and manual delivery through the normal mail account;
 - the administrator's own expenses;
 - operational reports and CSV exports;
 - complete database-and-document backup and restore.
@@ -42,7 +43,9 @@ The pilot is complete only when evidence exists for all of the following:
 - one complete own-business workflow has been performed;
 - a quote PDF has been manually checked before approval;
 - a draft invoice and its PDF have been manually checked before any send;
-- one controlled SMTP acceptance test reached only an approved test recipient;
+- SMTP remained disabled and no application-generated email was claimed;
+- one reviewed invoice PDF was manually delivered through the operator's normal
+  mail account and only then marked manually delivered;
 - a complete export containing database and documents has been created;
 - that export has been stored in an approved encrypted offsite target;
 - the offsite snapshot has been restored into a new, empty installation;
@@ -53,4 +56,5 @@ The pilot is complete only when evidence exists for all of the following:
 - no unintended email was sent.
 
 Synthetic local acceptance is necessary regression evidence but cannot satisfy
-the real SMTP, real offsite, deployed-revision, or real-operator exit criteria.
+manual delivery, real offsite, deployed-revision, or real-operator exit
+criteria. SMTP activation is not an exit criterion for this pilot.

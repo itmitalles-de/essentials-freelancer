@@ -26,6 +26,18 @@ def request(base_url, method, path, token=None, body=None, headers=None):
     return json.load(response) if response.length != 0 else None
 
 
+def download(base_url, path, token):
+    response = urllib.request.urlopen(
+        urllib.request.Request(
+            f"{base_url.rstrip('/')}{path}",
+            headers={"Authorization": f"Bearer {token}"},
+            method="GET",
+        ),
+        timeout=15,
+    )
+    return response.read()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", required=True)
@@ -59,8 +71,21 @@ def main():
             "invoice_footer_note": "NICHT BUCHEN — SYNTHETISCHER ANDROID-SMOKE",
             "invoice_number_prefix": "TESTRECHNUNG",
             "quote_number_prefix": "TESTANGEBOT",
-            "default_hourly_rate": "0",
+            "default_hourly_rate": "50.00",
             "default_payment_terms_days": 14,
+            "private_hourly_rate": "50.00",
+            "business_hourly_rate": "75.00",
+            "travel_hourly_rate": "30.00",
+            "first_order_minimum_minutes": 60,
+            "onsite_minimum_minutes": 60,
+            "remote_increment_minutes": 15,
+            "travel_minimum_minutes": 30,
+            "travel_increment_minutes": None,
+            "default_tax_rate": "0.00",
+            "small_business_notice_enabled": True,
+            "small_business_notice_text": (
+                "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet."
+            ),
         },
     )
     client = request(
@@ -74,7 +99,10 @@ def main():
             "address_line1": "Kunden-Testweg 2",
             "zip_city": "00000 Teststadt",
             "email": "android-smoke@example.invalid",
-            "hourly_rate": "80.00",
+            "hourly_rate": "50.00",
+            "billing_rate_type": "private",
+            "default_service_mode": "remote",
+            "billing_profile_confirmed": True,
         },
     )
     project = request(
@@ -86,7 +114,11 @@ def main():
             "client_id": client["id"],
             "name": "TESTPROJEKT",
             "description": "NICHT BUCHEN",
-            "hourly_rate": "80.00",
+            "hourly_rate": "75.00",
+            "billing_rate_type_override": "business",
+            "default_service_mode": "remote",
+            "is_individual_project": True,
+            "billing_profile_confirmed": True,
         },
     )
     request(
@@ -124,22 +156,38 @@ def main():
     )
     request(args.base_url, "PUT", f"/api/quotes/{quote['id']}/status", token, {"status": "sent"})
     request(args.base_url, "PUT", f"/api/quotes/{quote['id']}/status", token, {"status": "accepted"})
-    converted = request(args.base_url, "POST", f"/api/quotes/{quote['id']}/convert", token)
-    invoice = request(args.base_url, "GET", f"/api/invoices/{converted['converted_invoice_id']}", token)
-    request(args.base_url, "POST", "/api/admin/modules/communication.smtp/enable", token)
-    request(
+    conversion_preview = request(
         args.base_url,
         "POST",
-        f"/api/invoices/{invoice['id']}/send",
+        f"/api/quotes/{quote['id']}/invoice-preview",
+        token,
+        {"service_date": "2026-08-19"},
+    )
+    converted = request(
+        args.base_url,
+        "POST",
+        f"/api/quotes/{quote['id']}/convert",
         token,
         {
-            "recipient": "android-smoke@example.invalid",
-            "invoice_number": invoice["invoice_number"],
-            "total": invoice["total"],
-            "pdf_reviewed": True,
-            "resend": False,
+            "service_date": "2026-08-19",
+            "billing_confirmation_token": conversion_preview["confirmation_token"],
+            "billing_confirmed": True,
         },
-        {"Idempotency-Key": "android-smoke-first-send"},
+    )
+    invoice = request(args.base_url, "GET", f"/api/invoices/{converted['converted_invoice_id']}", token)
+    pdf = download(args.base_url, f"/api/invoices/{invoice['id']}/pdf", token)
+    if not pdf.startswith(b"%PDF-"):
+        raise RuntimeError("android-smoke invoice PDF is invalid")
+    request(
+        args.base_url,
+        "PUT",
+        f"/api/invoices/{invoice['id']}/status",
+        token,
+        {
+            "status": "sent",
+            "pdf_reviewed": True,
+            "manual_delivery_confirmed": True,
+        },
     )
     print("android-smoke-seed: TESTKUNDE/TESTPROJEKT/TESTANGEBOT/TESTRECHNUNG ready")
 

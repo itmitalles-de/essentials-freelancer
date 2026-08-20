@@ -207,6 +207,7 @@ python3 -m py_compile \
   "$PROJECT_DIR/scripts/generate-pilot-sbom.py" \
   "$PROJECT_DIR/tests/full-check/deployment_evidence_check.py" \
   "$PROJECT_DIR/tests/full-check/api_flow.py" \
+  "$PROJECT_DIR/tests/full-check/postgres_migration_copy.py" \
   "$PROJECT_DIR/tests/full-check/smtp-fixture/smtp_fixture.py"
 "$PROJECT_DIR/scripts/check-secrets.sh"
 python3 "$PROJECT_DIR/scripts/generate-pilot-sbom.py" \
@@ -228,6 +229,15 @@ else
   (cd "$PROJECT_DIR/frontend" && npx playwright install chromium)
 fi
 
+printf 'full-check: populated PostgreSQL 0006 database-copy upgrade to 0007\n'
+source_compose up -d --wait db
+source_compose build backend
+source_compose run --rm --no-deps \
+  -e "MIGRATION_ADMIN_DATABASE_URL=postgresql://tracker:$SOURCE_DB_PASSWORD@db:5432/postgres" \
+  -e "MIGRATION_RUN_ID=$RUN_ID" \
+  -v "$PROJECT_DIR/tests/full-check:/full-check:ro" \
+  backend python /full-check/postgres_migration_copy.py
+
 printf 'full-check: start disposable source stack\n'
 docker network create "$PROXY_NETWORK" >/dev/null
 source_compose up -d --build db smtp-fixture backend frontend
@@ -236,7 +246,7 @@ SOURCE_SMTP_URL="http://127.0.0.1:$SOURCE_SMTP_HTTP_PORT"
 poll_url "$SOURCE_BASE_URL/api/ready" 'source readiness'
 poll_url "$SOURCE_SMTP_URL/health" 'SMTP fixture'
 
-printf 'full-check: API, PDF, SMTP, module, and receipt acceptance flow\n'
+printf 'full-check: API, PDF, billing, SMTP-lock, module, and receipt acceptance flow\n'
 python3 "$PROJECT_DIR/tests/full-check/api_flow.py" \
   --base-url "$SOURCE_BASE_URL" \
   --username "$ADMIN_USERNAME" \

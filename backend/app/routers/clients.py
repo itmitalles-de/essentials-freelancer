@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_current_user, require_module
-from app.models import Client, Invoice, Project, Quote, TimeEntry, User
+from app.models import Client, CompanySettings, Invoice, Project, Quote, TimeEntry, User
 from app.schemas import ClientCreate, ClientOut
 
 router = APIRouter(
@@ -11,6 +11,25 @@ router = APIRouter(
     tags=["clients"],
     dependencies=[Depends(require_module("core.clients"))],
 )
+
+
+def _client_data(db: Session, payload: ClientCreate) -> dict:
+    data = payload.model_dump(mode="json")
+    if data["hourly_rate"] is None and data["billing_rate_type"] in {
+        "private",
+        "business",
+    }:
+        company = db.get(CompanySettings, 1)
+        if company is None:
+            company = CompanySettings(id=1)
+            db.add(company)
+            db.flush()
+        data["hourly_rate"] = (
+            company.private_hourly_rate
+            if data["billing_rate_type"] == "private"
+            else company.business_hourly_rate
+        )
+    return data
 
 
 @router.get("", response_model=list[ClientOut])
@@ -37,7 +56,7 @@ def create_client(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    client = Client(**payload.model_dump())
+    client = Client(**_client_data(db, payload))
     db.add(client)
     db.commit()
     db.refresh(client)
@@ -66,7 +85,7 @@ def update_client(
     client = db.get(Client, client_id)
     if client is None:
         raise HTTPException(status_code=404, detail="Kunde nicht gefunden")
-    for key, value in payload.model_dump().items():
+    for key, value in _client_data(db, payload).items():
         setattr(client, key, value)
     db.commit()
     db.refresh(client)

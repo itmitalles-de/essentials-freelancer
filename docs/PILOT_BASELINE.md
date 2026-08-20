@@ -95,3 +95,30 @@ and cleanup.
 This is CI evidence against generated data, not a production claim. The run did
 not use a real SMTP provider, real offsite repository, authorized deployment
 target, customer address, production document, or release-signing key.
+
+## Billing-policy release-candidate acceptance
+
+The expanded `make full-check` completed successfully on 2026-08-20 after the
+`0007_billing_policy` implementation and independent review fixes. This run was
+performed on the final pre-commit worktree candidate; exact-head and API-35
+release evidence is attached to PR #3 checks rather than inferred here. No
+verification layer was skipped. A Playwright locator was corrected to assert
+the now-expected two client/project report groups and exactly one client master
+row; the business assertion was made more precise, not relaxed.
+
+| Layer | Billing-policy candidate result |
+|---|---|
+| Backend | Pass: 67 pytest tests; pip audit reported no known vulnerabilities. |
+| Frontend | Pass: 9 Vitest files / 11 tests, production build, and npm audit with 0 vulnerabilities. |
+| Android local | Pass: 3 JVM tests plus debug app and instrumentation APK assembly. |
+| Migration | Pass: a populated PostgreSQL `0006_pilot_safety` database copy upgraded to `0007_billing_policy` without historical invoice, time, number, PDF-path, or document-byte drift. |
+| Billing/API/PDF | Pass: 50/75/30-EUR rates, remote increments, first/onsite/travel minima, project/custom rates, quote-free behavior, visible confirmation, immutable snapshots, 0-percent § 19 profile, Decimal cases, concurrent numbering and PDF text. |
+| SMTP safety | Pass: module and route remained pilot-locked; fixture captured zero messages and no new send-attempt evidence. Manual delivery remained explicit. |
+| Playwright and axe | Pass: 2 source scenarios plus the same 2 restored-stack scenarios; 20 light/dark analyses reported no serious or critical violation. |
+| Supply chain | Pass: static policy checks, npm/pip audits, history-aware secret scan, and CycloneDX SBOM with 710 components. |
+| Backup/restore | Pass: encrypted local Restic snapshot (`sha256:e774bd44e774`), repository check, retention evaluation, restore into a separately named empty Compose target, and API/PDF/count/hash/browser comparison. |
+| Independent review | Pass: no open P0/P1 after targeted re-review of rates, minima, rounding, tax, old data, totals, SMTP crash exposure, backup and restore. |
+
+This remains synthetic evidence. Repository documentation identifies no exact
+authorized internal Docker host, so the deployment plan is committed but live
+deployment remains stopped.

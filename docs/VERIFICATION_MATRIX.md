@@ -1,34 +1,39 @@
 # Verification matrix
 
-Status as of 2026-08-19. `Synthetic` means generated data and disposable local
+Status as of 2026-08-20. `Synthetic` means generated data and disposable local
 infrastructure. It is never evidence for a production account, host, provider,
-proxy, DNS record, or deployed revision. Draft PR #3 CI run
+proxy, DNS record, customer document, or deployed revision.
+
+The billing-policy release candidate passed the complete local
+`make full-check` path described below. Final exact-head CI and API-35 evidence
+must be read from the checks attached to Draft PR #3; this document does not
+infer a final result from the earlier green run
 [`32207844740`](https://github.com/itmitalles-de/essentials-freelancer/actions/runs/32207844740)
-passed all six jobs at code-bearing commit `9da1efaa7889`; its dedicated
-API-35 result is recorded separately from JVM/APK assembly.
+at commit `9da1efaa7889`.
 
-| Function | Implemented | Local synthetic evidence | CI | API 35 | Real external / deployed | Remaining gate or risk |
-|---|---|---|---|---|---|---|
-| Single-admin login and protected routes | Yes | Backend/frontend auth, unauthorized-route, rate-limit and Compose login checks | Pass | Pass: login and protected API | No | Runtime secrets and proxy behavior are deployment-specific. |
-| Clients, projects and scoped rates | Yes | Unit/API/browser/restore checks on synthetic PostgreSQL | Pass | Pass: read-only client list | No | Authorized pilot data has not been entered. |
-| Timer, manual time, concurrency and idempotency | Yes | JVM/backend/API/restore checks, including competing commands | Pass | Pass: list/start/stop/recreate | No | Real workload and latency remain unknown. |
-| Quotes, deterministic assistant and one-time conversion | Yes | Versioned Decimal snapshots, human approval, PDF text and concurrent one-time conversion | Pass | Not in mobile scope | No | Catalog content, prices and every PDF require human approval. |
-| Invoice creation, numbering and Decimal rounding | Yes | Explicit tax input; PostgreSQL-parallel numbering; one-time allocation; 1/5/59-minute rounding; footer snapshot; PDF fields; cancellation | Pass | Pass: list/status | No | Operator remains responsible for concrete tax and invoice correctness. |
-| PDF review and invoice delivery gate | Yes | Browser confirmation shows recipient/number/amount/external warning; PDF-open prerequisite; mocked and fixture sends | Pass | Pass: PDF open/download | Real SMTP: **not tested** | Authorized SMTP account and controlled mailbox are absent. |
-| SMTP idempotency, resend and failures | Yes | Successful replay does not resend; explicit resend is auditable; auth/reject/timeout/disconnect and failed-resend state covered | Pass | Not applicable | Real SMTP: **not tested** | Provider acceptance, routing and delivery are external. |
-| Deliberate paid state | Yes | Send never marks paid; transition and terminal-state tests | Pass | Pass: explicit paid action | No | Real payment observation is an operator responsibility. |
-| Receipts and MIME protection | Yes | Generated PNG/JPEG/PDF uploads, limits/signatures, export/restore and browser rows | Pass | Not in mobile scope | No | No real document was read. |
-| Reports and CSV | Yes | Backend/filter/API/browser checks for time, quotes, invoices and expenses | Pass | Not in mobile scope | No | Reports are operational facts, not accounting/tax advice. |
-| Schema and migrations through `0006_pilot_safety` | Yes | SQLite migration regressions plus two fresh PostgreSQL stacks and readiness revision | Pass | Indirect via synthetic stack | No | A copy of any real database was intentionally not used. |
-| Complete export and isolated restore | Yes | Database dump plus entire document volume, checksums, revision, empty-target refusal, counts/hashes/API/browser comparison and cleanup | Pass | Not applicable | Real deployment: **not tested** | Host capacity, permissions and real data remain unknown. |
-| Encrypted offsite backup | Yes | Temporary encrypted local Restic snapshot, check, retention evaluation and isolated restore | Pass | Not applicable | Real offsite: **not tested** | Approved target and protected credentials are absent. |
-| Deployment revision/drift evidence | Yes | Secret-safe JSON/Markdown inspector structure and redaction checked against disposable Compose | Pass | Not applicable | Deployed revision: **unknown** | Authorized target access, proxy and TLS evidence are absent. |
-| Liveness/readiness/build provenance | Yes | `/health`, database-backed `/ready`, public allowlisted `/meta`, OCI revision/build labels and restored revision checks | Pass | Pass: readiness-gated stack | No | Public ingress/TLS and actual image identity are deployment-specific. |
-| Android compatibility | Yes | 3 JVM tests; app and instrumentation APK assembly; authenticated-client cache regression | Pass | Pass: full pilot scenario | No | Release signing remains external. |
-| Supply chain and governance | Yes | Action SHA/image digest static checks, npm/pip audits, Gradle wrapper checksum and verification metadata, secret history scan, CycloneDX SBOM (710 components) | Pass | Indirect | Branch enforcement unavailable | Private-repository plan returned HTTP 403 for branch protection/rulesets; manual Draft-PR gate is required. |
+| Function | Implemented | Local synthetic evidence | Exact-head / external boundary |
+|---|---|---|---|
+| Single-admin login and protected routes | Yes | Backend, frontend, Compose and restored-browser checks | Final PR #3 check required; runtime secrets/proxy remain deployment-specific. |
+| Client and project billing profiles | Yes | Private/business/custom rates, optional client mode, project rate/type override, individual-project fallback and confirmation gates | Tim's real profiles have not been entered. |
+| Billing rules | Yes | Remote 1→15, 16→30 and 31→45 minutes; first-order and onsite 60-minute minima; separate 10→30-minute travel; unset travel increment preserves actual minutes above 30 | Values remain configurable operator settings, not calculation constants. |
+| Time-entry decision evidence | Yes | Actual/billable work and travel minutes, rate/type/source, minimum, increment, mode, first-order flag, reason and versioned policy ID tested through API and restore | Migrated open rows require profile and preview confirmation. |
+| Pre-invoice review | Yes | UI/API expose work, travel, actual/billable minutes, rate, minimum, increment, reason, tax and totals; stale tokens and missing confirmation are rejected | Operator remains responsible for the reviewed business/tax facts. |
+| Immutable invoice snapshots and PDFs | Yes | Rate/minimum/increment/date/project/description/duration/tax/footer snapshots and byte-stable stored PDF tested after later configuration changes | Existing PDFs are never regenerated by the migration. |
+| Free quotes and fixed-price conversion | Yes | Quote creation creates no time; accepted conversion requires service date, visible N/A time fields, exact token and conscious confirmation | Separate consulting time is billable only when explicitly captured as service work. |
+| Tax profile | Yes | Explicit 0-percent setting and explicitly enabled § 19 notice; delayed non-zero web default; notice/footer snapshots | No tax status is inferred. Tim must approve operator data and notice text. |
+| Invoice number concurrency and Decimal money | Yes | Competing PostgreSQL creations produce unique consecutive numbers; minute-based Decimal cent rounding and scale limits are covered | No production number sequence was touched. |
+| SMTP first-pilot state | Locked off | Module enable and send routes return `pilot_module_locked`; fixture sees zero messages and no new send-attempt row; UI only records conscious manual delivery after PDF review | SMTP is not activated or described as having sent mail. Future activation requires the complete crash-safe contract. |
+| Schema migration through `0007_billing_policy` | Yes | SQLite regressions plus a populated PostgreSQL `0006` database copy upgraded to `0007` without invoice/history/document drift | A real deployment copy was not supplied. Full backup remains mandatory before upgrade. |
+| Clients, projects, expenses, reports and CSV | Yes | Backend/API/browser/restore flow with synthetic rows and generated PNG/JPEG/PDF receipts | No real business data was read. |
+| Complete export and empty-target restore | Yes | PostgreSQL plus complete document volume, checksums, revision, empty-target guard, restored counts/hashes/API/PDF/browser comparison | Real host capacity, permissions and approved storage remain unknown. |
+| Encrypted backup | Yes | Temporary encrypted Restic snapshot, repository check, retention evaluation and isolated restore | Approved persistent/offsite target and protected credentials are absent. |
+| Playwright and axe | Yes | Two scenarios on source plus restore stack; 20 light/dark axe analyses with no serious/critical violation | Browser fixture is local synthetic evidence. |
+| Android local compatibility | Yes | 3 JVM tests plus debug app and instrumentation APK assembly in `make full-check` | The dedicated exact-head API-35 emulator job is a required PR #3 check; release signing is external. |
+| Supply chain and secrets | Yes | npm/pip audits, pinned Action/base references, Gradle verification, history-aware secret scan and CycloneDX SBOM (710 components) | Reviewed image ID/digest, not a later rebuild, is the deployable identity. |
+| Deployment revision/drift evidence | Planned | Inspector/evidence schema and redaction are synthetically checked | No exact authorized Docker host is named in repository documentation, so no live deployment was attempted. |
 
-The reproducible entry point is `make full-check`. It uses random names, ports,
-volumes, networks and generated secrets, emits diagnostics on failure, and
-removes its disposable resources. The dedicated `android-api35-smoke` workflow
-adds a real emulator layer against an unmistakably synthetic Compose stack.
-Neither layer authorizes customer email or establishes production readiness.
+The reproducible local entry point is `make full-check`. It uses random names,
+ports, volumes, networks and generated secrets, emits diagnostics on failure,
+and removes its disposable resources. The dedicated `android-api35-smoke` job
+adds the emulator layer against unmistakably synthetic data. Neither layer
+authorizes customer email or establishes deployed production state.

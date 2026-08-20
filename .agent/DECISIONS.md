@@ -63,6 +63,11 @@ updates, and unlinking source records were rejected.
 **Consequences:** Changes to invoice, quote, time, PDF, or deletion paths must
 retain rollback behavior and receive focused tests for these invariants.
 
+Accepted fixed-price quotes use a dedicated invoice preview token, an explicit
+service date, and operator confirmation. Facts that do not exist for a fixed
+quote (actual/billable minutes, work minimum, increment, and service mode) are
+stored as null and shown as not applicable; they are never invented as zero.
+
 ## 2026-08-13 - Keep the Essentials+ module contract repository-local
 
 **Decision:** Module manifests, persisted state, dependency/conflict checks,
@@ -163,3 +168,39 @@ provider delivery, remote durability, or recovery from a remote target.
 reason to invent configuration or infrastructure. Backup retention is dry-run
 by default, restoration uses different empty volumes, and evidence language
 must distinguish implemented/local/CI/emulator/real-external/deployed/unknown.
+
+## 2026-08-20 - Make billing decisions explicit, configurable, and immutable
+
+**Decision:** Billing rules live in one versioned policy service backed by
+operator settings. Tim's profile is private 50 EUR/hour, business/individual
+project 75 EUR/hour, travel 30 EUR/hour, 60-minute first/onsite work minima,
+15-minute remote-follow-up increments, and a 30-minute travel minimum with no
+default travel increment. Time stores the resolved decision; invoice creation
+requires an exact visible preview and snapshots every relevant input/result.
+
+**Reason:** A mutable client rate or rounded display quantity cannot explain a
+historic invoice. The operator must see and confirm every minimum, increment,
+travel amount, tax status and total before number/PDF creation.
+
+**Consequences:** Later settings/project/client changes affect only newly
+calculated decisions. Existing invoice rows/PDFs remain unchanged. Migrated
+profiles and unbilled time are unconfirmed until explicit review. Quote
+creation never creates billable time. Unknown historical snapshot facts remain
+null rather than being invented.
+
+## 2026-08-20 - Lock SMTP off for the first internal pilot
+
+**Decision:** This supersedes the 2026-08-19 SMTP activation path for the first
+pilot. `communication.smtp` is forced disabled and cannot be enabled. The
+operator reviews/downloads the PDF, sends it through the normal external mail
+account, then explicitly records manual delivery.
+
+**Reason:** The existing SMTP call can succeed externally before the local
+transaction commits. Without durable pre-send state and `send_unknown`, a
+process failure can make delivery ambiguous and an automatic retry unsafe.
+
+**Consequences:** Runtime SMTP configuration does not activate delivery; the
+fixture must observe zero messages and no new send-attempt row. Future SMTP
+work is one complete hardening contract, including crash injection before/after
+acceptance and no automatic retry from `send_unknown`; partial hardening cannot
+unlock the module.

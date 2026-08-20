@@ -9,7 +9,8 @@ from app.config import settings
 
 
 PRODUCT_VERSION = "0.2.0"
-SCHEMA_VERSION = "0006_pilot_safety"
+SCHEMA_VERSION = "0007_billing_policy"
+PILOT_LOCKED_MODULES = {"communication.smtp"}
 
 
 class ModuleState(StrEnum):
@@ -249,11 +250,11 @@ MODULES: tuple[ModuleManifest, ...] = (
     ModuleManifest(
         id="communication.smtp",
         display_name="E-Mail-Versand",
-        description="SMTP delivery of generated invoice PDFs.",
+        description="SMTP delivery is locked off for the internal pilot; PDFs are sent manually.",
         group="Kommunikation",
         module_type=ModuleType.connector,
         required=False,
-        default_state=ModuleState.enabled,
+        default_state=ModuleState.disabled,
         dependencies=("billing.invoices",),
         configuration_fields=(
             ConfigurationRequirement(key="smtp_host", label="SMTP host"),
@@ -274,7 +275,7 @@ MODULES: tuple[ModuleManifest, ...] = (
         export_behavior="No connector secret or SMTP message is included in business-data exports.",
         backup_behavior="No connector secret is stored in application backups.",
         restore_behavior="Host-managed SMTP configuration must be supplied separately after restore.",
-        activation_behavior="Enables send operations when required non-secret configuration is present.",
+        activation_behavior="Blocked until the crash-safe send contract is implemented and tested.",
         deactivation_behavior="Stops new send operations; invoice states and PDFs remain unchanged.",
         update_behavior="Configuration contract changes require an explicit manifest schema update.",
     ),
