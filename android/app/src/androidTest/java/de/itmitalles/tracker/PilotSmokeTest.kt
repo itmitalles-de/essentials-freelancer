@@ -45,9 +45,14 @@ class PilotSmokeTest {
         Intents.release()
     }
 
+    private fun waitForAppWindowFocus() {
+        compose.waitUntil(20_000) { compose.activity.hasWindowFocus() }
+    }
+
     @Test
     fun api35InternalPilotFlow() {
         compose.waitUntilAtLeastOneExists(hasText("Anmelden"), 15_000)
+        waitForAppWindowFocus()
         compose.onNodeWithText("Server-URL (z.B. https://tracker.itmitalles.de)")
             .performTextInput(serverUrl)
         compose.onNodeWithText("Benutzername").performTextInput(username)
@@ -63,6 +68,7 @@ class PilotSmokeTest {
         compose.onNodeWithText("Beschreibung").performTextInput("ANDROID STATE RESTORE")
         compose.activityRule.scenario.recreate()
         compose.waitUntilAtLeastOneExists(hasText("ANDROID STATE RESTORE"), 15_000)
+        waitForAppWindowFocus()
 
         compose.onNodeWithText("Start").performClick()
         compose.waitUntilAtLeastOneExists(hasText("Stopp"), 20_000)
@@ -86,10 +92,12 @@ class PilotSmokeTest {
         }
         intended(hasAction(Intent.ACTION_VIEW))
 
+        waitForAppWindowFocus()
         compose.onNodeWithText("Als bezahlt markieren").performClick()
         compose.waitUntilAtLeastOneExists(hasText("paid"), 20_000)
         compose.activityRule.scenario.recreate()
         compose.waitUntilAtLeastOneExists(hasText("TESTRECHNUNG", substring = true), 20_000)
+        waitForAppWindowFocus()
         compose.onNodeWithText("paid").assertExists()
         compose.onAllNodesWithText("Als bezahlt markieren").assertCountEquals(0)
     }
