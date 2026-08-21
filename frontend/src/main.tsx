@@ -5,6 +5,7 @@ import App from "./App";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { AuthProvider } from "./contexts/AuthContext";
+import "@itmitalles-de/simple-business-design-system/tokens.css";
 import "./theme.css";
 
 createRoot(document.getElementById("root")!).render(

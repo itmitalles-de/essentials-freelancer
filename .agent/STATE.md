@@ -89,6 +89,9 @@ signing key was supplied or exercised.
 ## Simple Business design-system contract
 
 - `.simple-business-design-system.json` pins the central UI source to commit
-  `e508cc2` and package version `0.1.0`; no rules are copied into this product.
-- Existing web and Android UI remains legacy. Package/CI activation waits for
-  the central GitHub Actions billing blocker and is not claimed as complete.
+  `8bbee92` and package version `0.1.1`; no rules are copied into this product.
+- The frontend consumes the exact public release artifact, loads its token
+  stylesheet before the local theme, and runs the shared icon-semantics check in
+  product CI and `full-check`.
+- Existing web and Android UI remains legacy. This package activation is not a
+  claim that the full visual migration is complete.
