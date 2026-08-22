@@ -177,10 +177,11 @@ docker build --target test -t "freelancer-backend-test:$RUN_ID" "$PROJECT_DIR/ba
 docker run --rm "freelancer-backend-test:$RUN_ID"
 docker run --rm "freelancer-backend-test:$RUN_ID" python -m pip_audit -r requirements.txt
 
-printf 'full-check: frontend unit tests, production build, and dependency audit\n'
+printf 'full-check: frontend design lint, unit tests, production build, and dependency audit\n'
 (
   cd "$PROJECT_DIR/frontend"
   npm ci
+  npm run lint:design
   npm test
   npm run build
   npm audit --audit-level=moderate

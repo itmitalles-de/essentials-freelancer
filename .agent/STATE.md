@@ -85,3 +85,13 @@ signing key was supplied or exercised.
 - `docs/BACKUP_RESTORE.md`
 - `docs/INTERNAL_DEPLOYMENT_PLAN.md`
 - `.agent/TODO.md`
+
+## Simple Business design-system contract
+
+- `.simple-business-design-system.json` pins the central UI source to commit
+  `8bbee92` and package version `0.1.1`; no rules are copied into this product.
+- The frontend consumes the exact public release artifact, loads its token
+  stylesheet before the local theme, and runs the shared icon-semantics check in
+  product CI and `full-check`.
+- Existing web and Android UI remains legacy. This package activation is not a
+  claim that the full visual migration is complete.
